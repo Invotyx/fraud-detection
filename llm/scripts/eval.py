@@ -42,7 +42,8 @@ FP_RATE_TARGET = 0.10
 # Inference helpers
 # ---------------------------------------------------------------------------
 
-_SYSTEM_PROMPT_PATH = Path(__file__).parent.parent / "prompts" / "system_prompt.txt"
+_SYSTEM_PROMPT_PATH = Path(__file__).parent.parent / \
+    "prompts" / "system_prompt.txt"
 
 
 def _load_system_prompt() -> str:
@@ -131,13 +132,16 @@ def _compute_metrics(
     per_param: Dict[str, Dict[str, float]] = {}
     macro_f1_list = []
     for param in PARAMETERS:
-        prec = tp[param] / (tp[param] + fp[param]) if (tp[param] + fp[param]) else 0.0
-        rec = tp[param] / (tp[param] + fn[param]) if (tp[param] + fn[param]) else 0.0
+        prec = tp[param] / (tp[param] + fp[param]
+                            ) if (tp[param] + fp[param]) else 0.0
+        rec = tp[param] / (tp[param] + fn[param]
+                           ) if (tp[param] + fn[param]) else 0.0
         f1 = (2 * prec * rec / (prec + rec)) if (prec + rec) else 0.0
         per_param[param] = {"precision": prec, "recall": rec, "f1": f1}
         macro_f1_list.append(f1)
 
-    macro_f1 = sum(macro_f1_list) / len(macro_f1_list) if macro_f1_list else 0.0
+    macro_f1 = sum(macro_f1_list) / \
+        len(macro_f1_list) if macro_f1_list else 0.0
     fp_rate = benign_fp / benign_total if benign_total else 0.0
 
     return {
@@ -202,7 +206,8 @@ def evaluate(
 
         # Reference scores
         ref_params = ref_output.get("parameters", ref_output)
-        ref_scores: Dict[str, Any] = {"label_decision": ref_output.get("decision", "allow")}
+        ref_scores: Dict[str, Any] = {
+            "label_decision": ref_output.get("decision", "allow")}
         for param in PARAMETERS:
             if isinstance(ref_params.get(param), dict):
                 ref_scores[param] = float(ref_params[param].get("score", 0.0))
@@ -272,8 +277,10 @@ def print_report(metrics: Dict[str, Any]) -> bool:
     sla_p95 = lat.get("p95", 9999) < 2000
 
     print()
-    print(f"  SLA: JSON parse {JSON_PARSE_TARGET:.0%} : {'PASS' if sla_json else 'FAIL'}")
-    print(f"  SLA: FP rate ≤{FP_RATE_TARGET:.0%}   : {'PASS' if sla_fp else 'FAIL'}")
+    print(
+        f"  SLA: JSON parse {JSON_PARSE_TARGET:.0%} : {'PASS' if sla_json else 'FAIL'}")
+    print(
+        f"  SLA: FP rate ≤{FP_RATE_TARGET:.0%}   : {'PASS' if sla_fp else 'FAIL'}")
     print(f"  SLA: p95 <2000ms      : {'PASS' if sla_p95 else 'FAIL'}")
     print(f"{'='*60}\n")
 
@@ -285,11 +292,15 @@ def print_report(metrics: Dict[str, Any]) -> bool:
 # ---------------------------------------------------------------------------
 
 def _parse_args() -> argparse.Namespace:
-    p = argparse.ArgumentParser(description="LLM evaluation — fraud detection model")
-    p.add_argument("--server-url", default=None, help="OpenAI-compatible server URL")
-    p.add_argument("--model-dir", default=None, help="Local merged model directory")
+    p = argparse.ArgumentParser(
+        description="LLM evaluation — fraud detection model")
+    p.add_argument("--server-url", default=None,
+                   help="OpenAI-compatible server URL")
+    p.add_argument("--model-dir", default=None,
+                   help="Local merged model directory")
     p.add_argument("--test-data", default="llm/data/test.jsonl")
-    p.add_argument("--output", default=None, help="Save eval results JSON to this path")
+    p.add_argument("--output", default=None,
+                   help="Save eval results JSON to this path")
     p.add_argument("--dry-run", action="store_true",
                    help="Use stub responses; skip model loading")
     return p.parse_args()
@@ -310,10 +321,11 @@ def _dry_run_infer_fn(user_text: str, _system_prompt: str) -> str:
     is_fraud = any(kw in user_text.lower()
                    for kw in ["ignore", "prize", "transfer", "password", "base64"])
     score = 0.85 if is_fraud else 0.05
-    params = {p: {"score": score if p == "fraud_intent" else 0.02} for p in PARAMETERS}
+    params = {p: {"score": score if p == "fraud_intent" else 0.02}
+              for p in PARAMETERS}
     decision = "block" if score >= 0.7 else "allow"
     return json.dumps({"parameters": params, "decision": decision,
-                        "unified_risk_score": score, "explanation": "dry run"})
+                       "unified_risk_score": score, "explanation": "dry run"})
 
 
 def main() -> None:
@@ -351,7 +363,8 @@ def main() -> None:
             model = AutoModelForCausalLM.from_pretrained(
                 args.model_dir, torch_dtype=torch.float16, device_map="auto"
             )
-            pipe = pipeline("text-generation", model=model, tokenizer=tokenizer)
+            pipe = pipeline("text-generation", model=model,
+                            tokenizer=tokenizer)
 
             def infer_fn(text: str, prompt: str) -> Optional[str]:
                 return _call_local(pipe, text, prompt)
@@ -378,7 +391,8 @@ def main() -> None:
         if weak:
             print(f"Weak parameters (F1 < {PER_PARAM_F1_TARGET}): {weak}")
             print(f"  → Saved to {weak_path}")
-            print(f"  → Run targeted_fix.py --eval-results {args.output} to fix these.")
+            print(
+                f"  → Run targeted_fix.py --eval-results {args.output} to fix these.")
 
     sys.exit(0 if sla_pass else 1)
 

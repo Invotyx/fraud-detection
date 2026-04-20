@@ -91,7 +91,8 @@ def merge_lora(checkpoint: str, merged_dir: str) -> None:
             device_map="auto",
             trust_remote_code=True,
         )
-        tokenizer = AutoTokenizer.from_pretrained(checkpoint, trust_remote_code=True)
+        tokenizer = AutoTokenizer.from_pretrained(
+            checkpoint, trust_remote_code=True)
 
     print("[2/3] Merging LoRA adapter → base model...")
     peft_model = PeftModel.from_pretrained(model, checkpoint)
@@ -103,7 +104,8 @@ def merge_lora(checkpoint: str, merged_dir: str) -> None:
     tokenizer.save_pretrained(merged_dir)
 
     checksum = _sha256_dir(merged_dir)
-    info = {"base_model": base_model_id, "checkpoint": checkpoint, "sha256": checksum}
+    info = {"base_model": base_model_id,
+            "checkpoint": checkpoint, "sha256": checksum}
     (Path(merged_dir) / "merge_info.json").write_text(json.dumps(info, indent=2))
     print(f"\nModel SHA-256: {checksum}")
     print(f"Merge complete → {merged_dir}\n")
@@ -163,8 +165,10 @@ def serve_hf(merged_dir: str, port: int = 8001) -> None:
             content_len = int(self.headers.get("Content-Length", 0))
             body = json.loads(self.rfile.read(content_len))
             messages = body.get("messages", [])
-            prompt = "\n".join(f"{m['role']}: {m['content']}" for m in messages)
-            result = pipe(prompt, max_new_tokens=512, do_sample=False)[0]["generated_text"]
+            prompt = "\n".join(
+                f"{m['role']}: {m['content']}" for m in messages)
+            result = pipe(prompt, max_new_tokens=512, do_sample=False)[
+                0]["generated_text"]
             # Extract only the new tokens
             new_text = result[len(prompt):].strip()
             resp = {
@@ -211,7 +215,8 @@ _SAMPLE_PAYLOADS = [
     "Hello, how are you today?",
 ]
 
-_SYSTEM_PROMPT_PATH = Path(__file__).parent.parent / "prompts" / "system_prompt.txt"
+_SYSTEM_PROMPT_PATH = Path(__file__).parent.parent / \
+    "prompts" / "system_prompt.txt"
 
 
 def run_benchmark(server_url: str, n_requests: int = 50) -> None:
@@ -265,8 +270,10 @@ def run_benchmark(server_url: str, n_requests: int = 50) -> None:
     print(f"  Errors  : {errors}")
     print(f"  Mean    : {mean_ms:.0f} ms")
     print(f"  p50     : {p50:.0f} ms")
-    print(f"  p95     : {p95:.0f} ms  (SLA: <2000 ms {'PASS' if p95 < 2000 else 'FAIL'})")
-    print(f"  p99     : {p99:.0f} ms  (SLA: <5000 ms {'PASS' if p99 < 5000 else 'FAIL'})")
+    print(
+        f"  p95     : {p95:.0f} ms  (SLA: <2000 ms {'PASS' if p95 < 2000 else 'FAIL'})")
+    print(
+        f"  p99     : {p99:.0f} ms  (SLA: <5000 ms {'PASS' if p99 < 5000 else 'FAIL'})")
     print(f"{'='*50}\n")
 
     sla_pass = p95 < 2000 and p99 < 5000 and errors == 0
@@ -278,7 +285,8 @@ def run_benchmark(server_url: str, n_requests: int = 50) -> None:
 # ---------------------------------------------------------------------------
 
 def _parse_args() -> argparse.Namespace:
-    p = argparse.ArgumentParser(description="Merge LoRA and serve fraud-detection model")
+    p = argparse.ArgumentParser(
+        description="Merge LoRA and serve fraud-detection model")
     p.add_argument("--checkpoint", default="checkpoints/run2/final",
                    help="Path to final LoRA checkpoint directory")
     p.add_argument("--merged-dir", default="checkpoints/final_merged",

@@ -2,25 +2,25 @@
 
 ## Model Overview
 
-| Field            | Value                                                          |
-|------------------|----------------------------------------------------------------|
-| **Name**         | fraud-detector-mistral-7b                                      |
-| **Base model**   | `mistralai/Mistral-7B-Instruct-v0.3`                           |
-| **Fallback**     | `microsoft/Phi-3-mini-4k-instruct` (if T4 VRAM insufficient)  |
-| **Method**       | QLoRA 4-bit fine-tuning (NF4, double quantization)             |
-| **Adapter**      | LoRA r=16, alpha=32, dropout=0.05                              |
-| **Training hw**  | AWS g4dn.xlarge — NVIDIA T4 16 GB                              |
-| **Task**         | Structured fraud signal classification (7-parameter JSON output)|
+| Field           | Value                                                            |
+| --------------- | ---------------------------------------------------------------- |
+| **Name**        | fraud-detector-mistral-7b                                        |
+| **Base model**  | `mistralai/Mistral-7B-Instruct-v0.3`                             |
+| **Fallback**    | `microsoft/Phi-3-mini-4k-instruct` (if T4 VRAM insufficient)     |
+| **Method**      | QLoRA 4-bit fine-tuning (NF4, double quantization)               |
+| **Adapter**     | LoRA r=16, alpha=32, dropout=0.05                                |
+| **Training hw** | AWS g4dn.xlarge — NVIDIA T4 16 GB                                |
+| **Task**        | Structured fraud signal classification (7-parameter JSON output) |
 
 ---
 
 ## Training Runs
 
-| Run   | Epochs | LR     | Dataset focus                             | Key improvement |
-|-------|--------|--------|-------------------------------------------|-----------------|
-| Run 1 | 3      | 2e-4   | Instruction resistance, task adherence    | JSON parse rate → 100% |
-| Run 2 | 4      | 1e-4   | All 7 fraud parameters, benign balance    | Per-parameter F1 ≥ 0.80 |
-| Run 3 | 1–2    | 5e-5   | Targeted fix for weak parameters only     | Closes F1 gaps |
+| Run   | Epochs | LR   | Dataset focus                          | Key improvement         |
+| ----- | ------ | ---- | -------------------------------------- | ----------------------- |
+| Run 1 | 3      | 2e-4 | Instruction resistance, task adherence | JSON parse rate → 100%  |
+| Run 2 | 4      | 1e-4 | All 7 fraud parameters, benign balance | Per-parameter F1 ≥ 0.80 |
+| Run 3 | 1–2    | 5e-5 | Targeted fix for weak parameters only  | Closes F1 gaps          |
 
 ---
 
@@ -48,7 +48,7 @@ The model returns a structured JSON object for every input:
 ### Parameter weights (unified risk score)
 
 | Parameter           | Weight |
-|---------------------|--------|
+| ------------------- | ------ |
 | url_domain_risk     | 0.15   |
 | fraud_intent        | 0.20   |
 | prompt_injection    | 0.20   |
@@ -59,26 +59,26 @@ The model returns a structured JSON object for every input:
 
 ### Decision thresholds
 
-| Decision | Condition                                         |
-|----------|---------------------------------------------------|
-| allow    | unified_risk_score < 0.30                         |
-| review   | 0.30 ≤ unified_risk_score < 0.70                  |
-| block    | unified_risk_score ≥ 0.70                         |
-| block*   | Any single parameter score > 0.90 (hard block)   |
+| Decision | Condition                                      |
+| -------- | ---------------------------------------------- |
+| allow    | unified_risk_score < 0.30                      |
+| review   | 0.30 ≤ unified_risk_score < 0.70               |
+| block    | unified_risk_score ≥ 0.70                      |
+| block\*  | Any single parameter score > 0.90 (hard block) |
 
 ---
 
 ## Performance Targets
 
-| Metric                         | Target     |
-|--------------------------------|------------|
-| JSON parse rate                | 100%       |
-| Per-parameter F1 (each)        | ≥ 0.80     |
-| Macro F1                       | ≥ 0.80     |
-| False positive rate (benign)   | ≤ 10%      |
-| p95 inference latency          | < 2 000 ms |
-| p99 inference latency          | < 5 000 ms |
-| Red-team Critical pass rate    | 100%       |
+| Metric                       | Target     |
+| ---------------------------- | ---------- |
+| JSON parse rate              | 100%       |
+| Per-parameter F1 (each)      | ≥ 0.80     |
+| Macro F1                     | ≥ 0.80     |
+| False positive rate (benign) | ≤ 10%      |
+| p95 inference latency        | < 2 000 ms |
+| p99 inference latency        | < 5 000 ms |
+| Red-team Critical pass rate  | 100%       |
 
 ---
 
@@ -97,13 +97,13 @@ The model returns a structured JSON object for every input:
 
 ### Red-team categories tested
 
-| Category             | Probes | Severity    |
-|----------------------|--------|-------------|
-| Prompt injection     | 5      | Critical/High |
-| Obfuscation evasion  | 4      | High/Medium  |
-| Data exfiltration    | 3      | Critical     |
-| Context deviation    | 2      | High/Medium  |
-| Unauthorized tool use| 2      | Critical     |
+| Category              | Probes | Severity      |
+| --------------------- | ------ | ------------- |
+| Prompt injection      | 5      | Critical/High |
+| Obfuscation evasion   | 4      | High/Medium   |
+| Data exfiltration     | 3      | Critical      |
+| Context deviation     | 2      | High/Medium   |
+| Unauthorized tool use | 2      | Critical      |
 
 ---
 
@@ -150,6 +150,7 @@ After hardening, the merged model directory contains:
 - `hardening_summary.json` — Service configuration record
 
 Verify at any time:
+
 ```bash
 sha256sum -c checkpoints/final_merged/model_checksums.sha256
 ```

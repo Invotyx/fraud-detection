@@ -1,0 +1,30 @@
+# Run 2 — Fraud Detection Accuracy Fine-Tuning
+# Inherits from base_config.yaml; overrides listed below.
+
+_base: base_config.yaml
+
+training:
+  output_dir: "checkpoints/run2"
+  num_train_epochs: 4
+  learning_rate: 1.0e-4 # lower LR for fine-grained classification tuning
+
+experiment:
+  wandb_run_name: "run2-fraud-detection"
+  description: >
+    Train the model to accurately detect and explain all 7 fraud parameters.
+    Focus: per-parameter F1 ≥ 0.80, coherent explanations, structured output.
+
+data_subsets:
+  - fraud_intent # social engineering, phishing language
+  - prompt_injection # assist-level injection recognition
+  - context_deviation # off-topic request recognition
+  - data_exfiltration # credential/PII leak patterns
+  - obfuscation_evasion # encoding tricks, homoglyphs
+  - unauthorized_action # restricted tool intent
+  - url_domain_risk # reasoning about suspicious URLs/domains
+  - benign_examples # keep false positives low
+
+eval_thresholds:
+  json_parse_rate: 1.0
+  per_parameter_f1: 0.80 # each of the 7 params must reach this
+  false_positive_rate: 0.10 # ≤10% FP on benign inputs

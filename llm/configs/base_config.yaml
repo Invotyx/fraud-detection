@@ -1,0 +1,58 @@
+# LLM Training Configuration — Shared Base
+# Override per-run in run1_config.yaml / run2_config.yaml
+
+model:
+  base_model_id: "mistralai/Mistral-7B-Instruct-v0.3"
+  fallback_model_id: "microsoft/Phi-3-mini-4k-instruct"
+  max_seq_length: 2048
+  trust_remote_code: false
+
+quantization:
+  load_in_4bit: true
+  bnb_4bit_compute_dtype: "float16"
+  bnb_4bit_quant_type: "nf4"
+  bnb_4bit_use_double_quant: true
+
+lora:
+  r: 16
+  lora_alpha: 32
+  lora_dropout: 0.05
+  target_modules:
+    - q_proj
+    - v_proj
+    - k_proj
+    - o_proj
+  bias: "none"
+  task_type: "CAUSAL_LM"
+
+training:
+  output_dir: "checkpoints/run1"
+  per_device_train_batch_size: 2
+  gradient_accumulation_steps: 8 # effective batch size = 16
+  num_train_epochs: 3
+  learning_rate: 2.0e-4
+  fp16: true
+  bf16: false
+  gradient_checkpointing: true
+  optim: "paged_adamw_32bit"
+  lr_scheduler_type: "cosine"
+  warmup_ratio: 0.05
+  logging_steps: 25
+  save_steps: 100
+  eval_steps: 100
+  evaluation_strategy: "steps"
+  save_total_limit: 3
+  load_best_model_at_end: true
+  metric_for_best_model: "eval_loss"
+  report_to: "wandb" # set to "none" to disable W&B
+
+data:
+  train_file: "data/train.jsonl"
+  val_file: "data/val.jsonl"
+  test_file: "data/test.jsonl"
+  prompt_template: "prompts/system_prompt.txt"
+
+experiment:
+  wandb_project: "fraud-detection-llm"
+  wandb_run_name: "run1-resilience"
+  seed: 42

@@ -106,7 +106,8 @@ class TestAnalyzeURLDirectIP:
 class TestAnalyzeURLBlocklist:
     def test_blocklisted_url_scores_max(self):
         load_blocklist(["phishing-site.com"])
-        result = analyze_url("https://phishing-site.com/steal", skip_whois=True)
+        result = analyze_url(
+            "https://phishing-site.com/steal", skip_whois=True)
         assert result.is_blocklisted is True
         assert "blocklisted_domain" in result.flags
         assert result.score == 1.0
@@ -127,7 +128,8 @@ class TestAnalyzeURLShortener:
         assert "url_shortener" in result.flags
 
     def test_full_domain_not_shortener(self):
-        result = analyze_url("https://developer.mozilla.org/en-US/docs/Web/API", skip_whois=True)
+        result = analyze_url(
+            "https://developer.mozilla.org/en-US/docs/Web/API", skip_whois=True)
         assert "url_shortener" not in result.flags
 
 

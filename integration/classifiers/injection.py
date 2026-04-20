@@ -36,12 +36,14 @@ class InjectionResult:
 INJECTION_RULES: list[tuple[str, re.Pattern, float]] = [
     (
         "ignore_instructions",
-        re.compile(r"\bignore\s+(previous|all|prior|any)\s+instructions?\b", re.I),
+        re.compile(
+            r"\bignore\s+(previous|all|prior|any)\s+instructions?\b", re.I),
         0.95,
     ),
     (
         "forget_instructions",
-        re.compile(r"\bforget\s+(everything|your\s+instructions?|all\s+instructions?)\b", re.I),
+        re.compile(
+            r"\bforget\s+(everything|your\s+instructions?|all\s+instructions?)\b", re.I),
         0.95,
     ),
     (
@@ -61,7 +63,8 @@ INJECTION_RULES: list[tuple[str, re.Pattern, float]] = [
     ),
     (
         "jailbreak_keywords",
-        re.compile(r"\b(jailbreak|developer\s+mode|DAN|do\s+anything\s+now)\b", re.I),
+        re.compile(
+            r"\b(jailbreak|developer\s+mode|DAN|do\s+anything\s+now)\b", re.I),
         0.90,
     ),
     (
@@ -90,22 +93,26 @@ INJECTION_RULES: list[tuple[str, re.Pattern, float]] = [
     ),
     (
         "override_directive",
-        re.compile(r"\boverride\s+(your|all|the)\s+(instructions?|directives?|rules?)\b", re.I),
+        re.compile(
+            r"\boverride\s+(your|all|the)\s+(instructions?|directives?|rules?)\b", re.I),
         0.90,
     ),
     (
         "maintenance_mode",
-        re.compile(r"\b(maintenance\s+mode|admin\s+mode|god\s+mode|debug\s+mode)\b", re.I),
+        re.compile(
+            r"\b(maintenance\s+mode|admin\s+mode|god\s+mode|debug\s+mode)\b", re.I),
         0.85,
     ),
     (
         "repeat_system_prompt",
-        re.compile(r"\b(repeat|print|output|reveal|show|display)\s+(your\s+)?(system\s+prompt|instructions?|prompt)\b", re.I),
+        re.compile(
+            r"\b(repeat|print|output|reveal|show|display)\s+(your\s+)?(system\s+prompt|instructions?|prompt)\b", re.I),
         0.88,
     ),
     (
         "translate_instructions",
-        re.compile(r"\btranslate\s+your\s+(system\s+prompt|instructions?)\b", re.I),
+        re.compile(
+            r"\btranslate\s+your\s+(system\s+prompt|instructions?)\b", re.I),
         0.85,
     ),
 ]

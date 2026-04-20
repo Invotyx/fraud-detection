@@ -126,7 +126,8 @@ def _levenshtein(a: str, b: str) -> int:
     for i, ca in enumerate(a, 1):
         curr = [i]
         for j, cb in enumerate(b, 1):
-            curr.append(min(prev[j] + 1, curr[j - 1] + 1, prev[j - 1] + (ca != cb)))
+            curr.append(min(prev[j] + 1, curr[j - 1] +
+                        1, prev[j - 1] + (ca != cb)))
         prev = curr
     return prev[-1]
 
@@ -159,7 +160,8 @@ def _get_domain_age_days(domain: str) -> Optional[int]:
         if isinstance(creation, list):
             creation = creation[0]
         if isinstance(creation, datetime):
-            created_at = creation.replace(tzinfo=timezone.utc) if creation.tzinfo is None else creation
+            created_at = creation.replace(
+                tzinfo=timezone.utc) if creation.tzinfo is None else creation
             return (datetime.now(tz=timezone.utc) - created_at).days
     except Exception:
         pass

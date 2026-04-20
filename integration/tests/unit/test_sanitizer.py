@@ -36,7 +36,8 @@ class TestDangerousTagStripping:
         assert any("tag:<style>" in r for r in result.removed_elements)
 
     def test_iframe_tag_removed(self):
-        result = sanitize('<iframe src="https://evil.com"></iframe><p>safe</p>')
+        result = sanitize(
+            '<iframe src="https://evil.com"></iframe><p>safe</p>')
         assert "iframe" not in result.sanitized_text
         assert any("tag:<iframe>" in r for r in result.removed_elements)
 
@@ -192,7 +193,7 @@ class TestEncodingAnomalyDetection:
         text = "do this: %69%67%6e%6f%72%65"
         result = sanitize(text)
         assert any("percent_encoding" in a for a in result.encoding_anomalies) or \
-               "ignore" in result.sanitized_text  # decoded
+            "ignore" in result.sanitized_text  # decoded
 
     def test_hex_escape_sequences_detected(self):
         text = r"cmd: \x69\x67\x6e\x6f\x72\x65"

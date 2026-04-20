@@ -125,7 +125,8 @@ def _strip_html(raw: str) -> Tuple[str, List[str]]:
     # 3. Remove hidden elements
     for tag in soup.find_all(True):
         if _is_hidden_element(tag):
-            removed.append(f"hidden:{tag.name}[style={tag.get('style', '')[:60]}]")
+            removed.append(
+                f"hidden:{tag.name}[style={tag.get('style', '')[:60]}]")
             tag.decompose()
 
     # 4. Extract all URLs before we strip attributes

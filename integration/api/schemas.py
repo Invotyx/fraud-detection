@@ -35,13 +35,20 @@ class ParameterScore(BaseModel):
 
 
 class FraudAnalysisResult(BaseModel):
-    url_domain_risk: ParameterScore = Field(default_factory=lambda: ParameterScore(score=0.0))
-    fraud_intent: ParameterScore = Field(default_factory=lambda: ParameterScore(score=0.0))
-    prompt_injection: ParameterScore = Field(default_factory=lambda: ParameterScore(score=0.0))
-    context_deviation: ParameterScore = Field(default_factory=lambda: ParameterScore(score=0.0))
-    data_exfiltration: ParameterScore = Field(default_factory=lambda: ParameterScore(score=0.0))
-    obfuscation_evasion: ParameterScore = Field(default_factory=lambda: ParameterScore(score=0.0))
-    unauthorized_action: ParameterScore = Field(default_factory=lambda: ParameterScore(score=0.0))
+    url_domain_risk: ParameterScore = Field(
+        default_factory=lambda: ParameterScore(score=0.0))
+    fraud_intent: ParameterScore = Field(
+        default_factory=lambda: ParameterScore(score=0.0))
+    prompt_injection: ParameterScore = Field(
+        default_factory=lambda: ParameterScore(score=0.0))
+    context_deviation: ParameterScore = Field(
+        default_factory=lambda: ParameterScore(score=0.0))
+    data_exfiltration: ParameterScore = Field(
+        default_factory=lambda: ParameterScore(score=0.0))
+    obfuscation_evasion: ParameterScore = Field(
+        default_factory=lambda: ParameterScore(score=0.0))
+    unauthorized_action: ParameterScore = Field(
+        default_factory=lambda: ParameterScore(score=0.0))
     unified_risk_score: float = Field(0.0, ge=0.0, le=1.0)
     decision: Decision = Decision.ALLOW
     explanation: str = ""
@@ -55,7 +62,8 @@ class FraudAnalysisResult(BaseModel):
 class AnalyzeRequest(BaseModel):
     content: str = Field(..., min_length=1, max_length=50_000)
     session_id: Optional[str] = None
-    task_scope: Optional[str] = None  # declared scope for context deviation checks
+    # declared scope for context deviation checks
+    task_scope: Optional[str] = None
     metadata: Dict[str, str] = Field(default_factory=dict)
 
 

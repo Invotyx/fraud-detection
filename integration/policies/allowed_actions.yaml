@@ -1,0 +1,14 @@
+allowed_tools:
+  - analyze_text
+  - extract_urls
+  - classify_risk
+
+blocked_tools:
+  - send_email
+  - make_http_request
+  - write_file
+  - execute_code
+  - access_database
+  - read_file
+  - shell_exec
+  - subprocess

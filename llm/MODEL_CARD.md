@@ -4,8 +4,8 @@
 
 | Field           | Value                                                            |
 | --------------- | ---------------------------------------------------------------- |
-| **Name**        | fraud-detector-mistral-7b                                        |
-| **Base model**  | `mistralai/Mistral-7B-Instruct-v0.3`                             |
+| **Name**        | fraud-detector-llama-3.1-8b                                      |
+| **Base model**  | `meta-llama/Meta-Llama-3.1-8B-Instruct`                          |
 | **Fallback**    | `microsoft/Phi-3-mini-4k-instruct` (if T4 VRAM insufficient)     |
 | **Method**      | QLoRA 4-bit fine-tuning (NF4, double quantization)               |
 | **Adapter**     | LoRA r=16, alpha=32, dropout=0.05                                |
@@ -168,5 +168,5 @@ sha256sum -c checkpoints/final_merged/model_checksums.sha256
 
 ## License
 
-This model is derived from `mistralai/Mistral-7B-Instruct-v0.3`
-(Apache 2.0). LoRA adapter weights are proprietary to this project.
+This model is derived from `meta-llama/Meta-Llama-3.1-8B-Instruct`
+(Meta Llama 3.1 Community License). LoRA adapter weights are proprietary to this project.

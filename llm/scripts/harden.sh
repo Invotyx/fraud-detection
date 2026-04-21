@@ -59,7 +59,7 @@ MERGE_INFO="${MERGED_DIR}/merge_info.json"
 if [[ ! -f "${MERGE_INFO}" ]]; then
   cat > "${MERGE_INFO}" <<JSON
 {
-  "base_model": "mistralai/Mistral-7B-Instruct-v0.3",
+  "base_model": "meta-llama/Meta-Llama-3.1-8B-Instruct",
   "checkpoint": "checkpoints/run2/final",
   "sha256": "${MODEL_HASH}",
   "hardened_at": "$(date -u +%Y-%m-%dT%H:%M:%SZ)"

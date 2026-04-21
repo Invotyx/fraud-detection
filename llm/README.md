@@ -1,6 +1,6 @@
 # LLM Track — Fraud Detection Fine-Tuning
 
-QLoRA fine-tuning pipeline for `mistralai/Mistral-7B-Instruct-v0.3` that
+QLoRA fine-tuning pipeline for `meta-llama/Meta-Llama-3.1-8B-Instruct` that
 produces a structured 7-parameter fraud classifier, served as an
 OpenAI-compatible inference server.
 
@@ -49,7 +49,7 @@ llm/
 | Requirement       | Notes                               |
 | ----------------- | ----------------------------------- |
 | Ubuntu 22.04      | Tested on AWS g4dn.xlarge           |
-| NVIDIA T4 (16 GB) | Minimum for Mistral-7B 4-bit        |
+| NVIDIA T4 (16 GB) | Minimum for Llama-3.1-8B 4-bit      |
 | CUDA 12.1         | Installed by `setup.sh`             |
 | Python 3.11       | Installed by `setup.sh` in `~/venv` |
 | AWS CLI           | Only required for CloudWatch setup  |
@@ -75,7 +75,7 @@ What `setup.sh` does:
 4. Installs PyTorch 2.x (cu121)
 5. Installs training packages (`transformers`, `peft`, `bitsandbytes`, `trl`)
 6. Installs experiment tracking (`wandb`, `mlflow`)
-7. Verifies 4-bit model load (Mistral-7B → Phi-3-mini fallback)
+7. Verifies 4-bit model load (Llama-3.1-8B → Phi-3-mini fallback)
 
 ---
 
@@ -300,7 +300,7 @@ journalctl -u fraud-llm -f
 
 | Key                                    | Value                                | Description                                                                        |
 | -------------------------------------- | ------------------------------------ | ---------------------------------------------------------------------------------- |
-| `model.base_model_id`                  | `mistralai/Mistral-7B-Instruct-v0.3` | Base model                                                                         |
+| `model.base_model_id`                  | `meta-llama/Meta-Llama-3.1-8B-Instruct` | Base model                                                                         |
 | `model.max_seq_length`                 | `4096`                               | Sequence length; raised from 2048 to fit RAG context (~500 tokens) + system prompt |
 | `quantization.load_in_4bit`            | `true`                               | NF4 4-bit                                                                          |
 | `lora.r`                               | `16`                                 | LoRA rank                                                                          |

@@ -111,7 +111,7 @@ def _filter_subsets(
 
 def _format_for_sft(example: Dict[str, Any]) -> str:
     """
-    Format a training example into a single string using the Mistral chat template.
+    Format a training example into a single string using the Llama 3.1 chat template.
     For SFT with TRL, we use the messages format directly.
     """
     return example  # TRL's SFTTrainer accepts messages format natively

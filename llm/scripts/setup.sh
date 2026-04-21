@@ -155,7 +155,7 @@ python - <<'PYEOF'
 import torch
 from transformers import AutoModelForCausalLM, AutoTokenizer, BitsAndBytesConfig
 
-MODEL_ID = "mistralai/Mistral-7B-Instruct-v0.3"
+MODEL_ID = "meta-llama/Meta-Llama-3.1-8B-Instruct"
 print(f"  Loading {MODEL_ID} in 4-bit...")
 
 bnb_config = BitsAndBytesConfig(

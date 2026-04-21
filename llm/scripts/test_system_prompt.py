@@ -10,7 +10,7 @@ Usage
 python llm/scripts/test_system_prompt.py --url http://localhost:8001
 
 # Test using the transformers pipeline directly (slow, for dev)
-python llm/scripts/test_system_prompt.py --local --model mistralai/Mistral-7B-Instruct-v0.3
+python llm/scripts/test_system_prompt.py --local --model meta-llama/Meta-Llama-3.1-8B-Instruct
 """
 from __future__ import annotations
 
@@ -440,7 +440,7 @@ def _parse_args() -> argparse.Namespace:
                    help="HTTP endpoint (e.g., http://localhost:8001)")
     p.add_argument("--local", action="store_true",
                    help="Run inference locally via transformers")
-    p.add_argument("--model", default="mistralai/Mistral-7B-Instruct-v0.3",
+    p.add_argument("--model", default="meta-llama/Meta-Llama-3.1-8B-Instruct",
                    help="Model ID for local inference")
     p.add_argument("--dry-run", action="store_true",
                    help="Skip actual inference; validate test structure only")

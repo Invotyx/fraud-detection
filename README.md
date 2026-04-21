@@ -3,7 +3,7 @@
 A two-track system for detecting fraud signals in text inputs:
 
 - **Integration layer** — FastAPI service that runs a real-time multi-classifier pipeline (rule-based + ML + LLM ensemble) and exposes a REST API.
-- **LLM track** — QLoRA fine-tuning pipeline for Mistral-7B-Instruct that produces a structured 7-parameter fraud classifier, hosted as an OpenAI-compatible inference server.
+- **LLM track** — QLoRA fine-tuning pipeline for Llama-3.1-8B-Instruct that produces a structured 7-parameter fraud classifier, hosted as an OpenAI-compatible inference server.
 
 ---
 

@@ -41,9 +41,9 @@ def _load_adapter_base(checkpoint: str) -> str:
         with open(cfg_path) as fh:
             return json.load(fh).get(
                 "base_model_name_or_path",
-                "mistralai/Mistral-7B-Instruct-v0.3",
+                "meta-llama/Meta-Llama-3.1-8B-Instruct",
             )
-    return "mistralai/Mistral-7B-Instruct-v0.3"
+    return "meta-llama/Meta-Llama-3.1-8B-Instruct"
 
 
 def _sha256_dir(directory: str) -> str:

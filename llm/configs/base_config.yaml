@@ -2,7 +2,7 @@
 # Override per-run in run1_config.yaml / run2_config.yaml
 
 model:
-  base_model_id: "mistralai/Mistral-7B-Instruct-v0.3"
+  base_model_id: "meta-llama/Meta-Llama-3.1-8B-Instruct"
   fallback_model_id: "microsoft/Phi-3-mini-4k-instruct"
   max_seq_length: 4096 # increased from 2048 to accommodate RAG context prefix (~500 tokens)
   trust_remote_code: false

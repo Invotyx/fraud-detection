@@ -18,13 +18,13 @@
   trl sentencepiece einops scipy evaluate
   ```
 - [ ] Pull base model from Hugging Face (choose one):
-  - `mistralai/Mistral-7B-Instruct-v0.3` (preferred, strong instruction following)
+  - `meta-llama/Meta-Llama-3.1-8B-Instruct` (preferred, strong instruction following)
   - `microsoft/Phi-3-mini-4k-instruct` (fallback if T4 VRAM is tight)
 - [ ] Verify 4-bit quantized model loads without OOM:
   ```python
   from transformers import AutoModelForCausalLM, BitsAndBytesConfig
   bnb_config = BitsAndBytesConfig(load_in_4bit=True, bnb_4bit_compute_dtype=torch.float16)
-  model = AutoModelForCausalLM.from_pretrained("mistralai/Mistral-7B-Instruct-v0.3", quantization_config=bnb_config, device_map="auto")
+  model = AutoModelForCausalLM.from_pretrained("meta-llama/Meta-Llama-3.1-8B-Instruct", quantization_config=bnb_config, device_map="auto")
   ```
 - [ ] Set up experiment tracking: MLflow or Weights & Biases (W&B free tier)
 - [ ] Create project structure:

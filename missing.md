@@ -477,22 +477,22 @@ output — all `decision=block` examples labelled `unsafe`, all `decision=allow`
 | --------- | ----------- | ----------- | ----------- | ------------------------------------------------------------ |
 | INT-BUG-1 | Integration | 🔴 Critical | ✅ fixed    | `authority_spoof` missing from schema + validator            |
 | LLM-BUG-1 | LLM         | 🔴 Critical | ✅ fixed    | `authority_spoof` missing from PARAMETERS in red_team + eval |
-| INT-1     | Integration | 🟠 High     | not started | End-user security mitigation notifications                   |
-| INT-2     | Integration | 🟠 High     | not started | Spotlighting for RAG / external content                      |
-| INT-3     | Integration | 🟠 High     | not started | Guard model pre-filter (Llama-Guard)                         |
-| INT-4     | Integration | 🟠 High     | not started | SSRF protection for LLM server URL                           |
-| INT-5     | Integration | 🟠 High     | not started | Command injection detection                                  |
-| INT-6     | Integration | 🟠 High     | not started | Path traversal detection                                     |
-| INT-7     | Integration | 🟠 High     | not started | Payload splitting / session-level injection accumulation     |
-| LLM-1     | LLM         | 🟠 High     | not started | Spotlighting tokens in system prompt                         |
-| LLM-2     | LLM         | 🟠 High     | not started | Adversarial suffix training examples                         |
-| LLM-3     | LLM         | 🟠 High     | not started | Payload splitting training examples                          |
+| INT-1     | Integration | 🟠 High     | ✅ fixed    | End-user security mitigation notifications                   |
+| INT-2     | Integration | 🟠 High     | ✅ fixed    | Spotlighting for RAG / external content                      |
+| INT-3     | Integration | 🟠 High     | ✅ fixed    | Guard model pre-filter (rule-based, score ≥ 0.90)            |
+| INT-4     | Integration | 🟠 High     | ✅ fixed    | SSRF protection for LLM server URL                           |
+| INT-5     | Integration | 🟠 High     | ✅ fixed    | Command injection detection                                  |
+| INT-6     | Integration | 🟠 High     | ✅ fixed    | Path traversal detection                                     |
+| INT-7     | Integration | 🟠 High     | ✅ fixed    | Payload splitting / session-level injection accumulation     |
+| LLM-1     | LLM         | 🟠 High     | ✅ fixed    | Spotlighting tokens in system prompt                         |
+| LLM-2     | LLM         | 🟠 High     | ✅ fixed    | Adversarial suffix training examples                         |
+| LLM-3     | LLM         | 🟠 High     | ✅ fixed    | Payload splitting training examples                          |
 | INT-8     | Integration | 🟡 Medium   | not started | QR code decoding + analysis                                  |
 | INT-9     | Integration | 🟡 Medium   | not started | Image OCR for multimodal injection detection                 |
-| INT-10    | Integration | 🟡 Medium   | not started | Channel adapters (email / SMS / social)                      |
+| INT-10    | Integration | 🟡 Medium   | deferred    | Channel adapters (handled by client — out of scope)          |
 | INT-11    | Integration | 🟡 Medium   | not started | Token budget + concurrency cap + circuit-breaker             |
 | INT-12    | Integration | 🟡 Medium   | not started | Supply chain CVE scanning in CI                              |
-| LLM-4     | LLM         | 🟡 Medium   | not started | Output length limits in system prompt                        |
+| LLM-4     | LLM         | 🟡 Medium   | ✅ fixed    | Output length limits in system prompt                        |
 | LLM-5     | LLM         | 🟡 Medium   | not started | authority_spoof red-team test cases                          |
 | INT-13    | Integration | 🟢 Low      | not started | MCP server access controls                                   |
 | INT-14    | Integration | 🟢 Low      | not started | Hallucination / misinformation detection                     |

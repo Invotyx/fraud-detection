@@ -126,12 +126,12 @@ PYEOF
 # ---------------------------------------------------------------------------
 echo "[6/8] Installing LLM training packages..."
 pip install -q \
-    transformers==4.41.2 \
-    datasets==2.19.1 \
-    peft==0.11.1 \
-    bitsandbytes==0.43.1 \
-    accelerate==0.30.0 \
-    trl==0.8.6 \
+    transformers==4.45.2 \
+    datasets==2.21.0 \
+    peft==0.13.2 \
+    bitsandbytes==0.44.1 \
+    accelerate==0.34.2 \
+    trl==0.11.4 \
     sentencepiece \
     einops \
     scipy \
@@ -186,7 +186,7 @@ except Exception as exc:
         "mistralai/Mistral-7B-Instruct-v0.3",
         quantization_config=bnb_config,
         device_map="auto",
-        trust_remote_code=False,
+        trust_remote_code=True,
     )
     if torch.cuda.is_available():
         alloc = torch.cuda.memory_allocated() / 1024**3

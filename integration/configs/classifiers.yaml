@@ -78,11 +78,22 @@ url_risk:
   domain_age_threshold_days: 30 # domains younger than this → elevated risk
   lookalike_distance_threshold: 2 # Levenshtein distance for brand lookalike
 
+  # TLDs that are either free (Freenom) or heavily abused in regional phishing
+  # e.g. ecodfu-ps.cc/pk  →  suspicious_tld flag
+  suspicious_tlds:
+    - "cc"
+    - "tk"
+    - "ml"
+    - "ga"
+    - "cf"
+    - "gq"
+
   score_weights:
-    blocklisted: 1.00
+    blocklisted: 1.0
     direct_ip: 0.85
     young_domain: 0.60
     high_entropy: 0.55
+    suspicious_tld: 0.55
     lookalike: 0.70
     shortener: 0.40
 
@@ -125,3 +136,17 @@ url_risk:
     - "gmail.com"
     - "outlook.com"
     - "icloud.com"
+    # Pakistan government / payment portals
+    - "punjab.gov.pk"
+    - "epay.punjab.gov.pk"
+    - "psca.gop.pk"
+    - "punjabpolice.gov.pk"
+    - "fbr.gov.pk"
+    - "nadra.gov.pk"
+    - "ecp.gov.pk"
+    - "sbp.org.pk"
+    - "hbl.com"
+    - "mcb.com.pk"
+    - "ubldigital.com"
+    - "jazzcash.com.pk"
+    - "easypaisa.com.pk"

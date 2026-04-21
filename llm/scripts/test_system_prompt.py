@@ -206,19 +206,39 @@ def _load_system_prompt() -> str:
     raise FileNotFoundError(f"System prompt not found at {prompt_path}")
 
 
-def _call_local_model(user_prompt: str, system_prompt: str, model_id: str) -> str:
-    """Run inference using a local transformers pipeline (slow, dev only)."""
+# Module-level pipeline cache — loaded once and reused across all test cases.
+_LOCAL_PIPELINE: Any = None
+_LOCAL_PIPELINE_MODEL_ID: str = ""
+
+
+def _get_local_pipeline(model_id: str) -> Any:
+    """Return a cached transformers pipeline, loading it only on the first call."""
+    global _LOCAL_PIPELINE, _LOCAL_PIPELINE_MODEL_ID
+    if _LOCAL_PIPELINE is not None and _LOCAL_PIPELINE_MODEL_ID == model_id:
+        return _LOCAL_PIPELINE
+
     import torch
     from transformers import AutoModelForCausalLM, AutoTokenizer, BitsAndBytesConfig, pipeline
 
+    print(f"  Loading {model_id} into memory (once)...")
     bnb = BitsAndBytesConfig(
         load_in_4bit=True, bnb_4bit_compute_dtype=torch.float16)
     tokenizer = AutoTokenizer.from_pretrained(model_id)
     model = AutoModelForCausalLM.from_pretrained(
         model_id, quantization_config=bnb, device_map="auto"
     )
-    pipe = pipeline("text-generation", model=model, tokenizer=tokenizer,
-                    max_new_tokens=512, temperature=0.01)
+    _LOCAL_PIPELINE = pipeline(
+        "text-generation", model=model, tokenizer=tokenizer,
+        max_new_tokens=768, do_sample=True, temperature=0.01,
+    )
+    _LOCAL_PIPELINE_MODEL_ID = model_id
+    print("  Model ready.")
+    return _LOCAL_PIPELINE
+
+
+def _call_local_model(user_prompt: str, system_prompt: str, model_id: str) -> str:
+    """Run inference using a local transformers pipeline (slow, dev only)."""
+    pipe = _get_local_pipeline(model_id)
     messages = [
         {"role": "system", "content": system_prompt},
         {"role": "user", "content": user_prompt},
@@ -237,8 +257,9 @@ def _call_http_endpoint(user_prompt: str, system_prompt: str, url: str) -> str:
             {"role": "system", "content": system_prompt},
             {"role": "user", "content": user_prompt},
         ],
-        "max_tokens": 512,
+        "max_tokens": 768,
         "temperature": 0.01,
+        "do_sample": True,
     }).encode()
 
     req = urllib.request.Request(

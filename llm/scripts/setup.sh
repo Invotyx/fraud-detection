@@ -46,7 +46,15 @@ if ! command -v nvcc &>/dev/null; then
     wget -q ${CUDA_TOOLKIT_URL}/cuda-keyring_1.1-1_all.deb
     sudo dpkg -i cuda-keyring_1.1-1_all.deb
     sudo apt-get update -qq
-    sudo apt-get install -y cuda-toolkit-12-1
+    # Install only the packages needed for PyTorch + bitsandbytes training.
+    # Avoid the cuda-toolkit-12-1 meta-package: it pulls in nsight-systems which
+    # depends on libtinfo5, a library removed in Ubuntu 24.04.
+    sudo apt-get install -y --no-install-recommends \
+        cuda-nvcc-12-1 \
+        cuda-cudart-12-1 \
+        cuda-cudart-dev-12-1 \
+        libcublas-12-1 \
+        libcublas-dev-12-1
     rm cuda-keyring_1.1-1_all.deb
     echo 'export PATH=/usr/local/cuda-12.1/bin:$PATH' >> ~/.bashrc
     echo 'export LD_LIBRARY_PATH=/usr/local/cuda-12.1/lib64:$LD_LIBRARY_PATH' >> ~/.bashrc

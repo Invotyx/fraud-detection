@@ -2,15 +2,15 @@
 
 ## Model Overview
 
-| Field           | Value                                                            |
-| --------------- | ---------------------------------------------------------------- |
-| **Name**        | fraud-detector-llama-3.1-8b                                      |
-| **Base model**  | `meta-llama/Meta-Llama-3.1-8B-Instruct`                          |
-| **Fallback**    | `microsoft/Phi-3-mini-4k-instruct` (if T4 VRAM insufficient)     |
-| **Method**      | QLoRA 4-bit fine-tuning (NF4, double quantization)               |
-| **Adapter**     | LoRA r=16, alpha=32, dropout=0.05                                |
-| **Training hw** | AWS g4dn.xlarge — NVIDIA T4 16 GB                                |
-| **Task**        | Structured fraud signal classification (7-parameter JSON output) |
+| Field           | Value                                                              |
+| --------------- | ------------------------------------------------------------------ |
+| **Name**        | fraud-detector-llama-3.1-8b                                        |
+| **Base model**  | `meta-llama/Meta-Llama-3.1-8B-Instruct`                            |
+| **Fallback**    | `mistralai/Mistral-7B-Instruct-v0.3` (if Llama access unavailable) |
+| **Method**      | QLoRA 4-bit fine-tuning (NF4, double quantization)                 |
+| **Adapter**     | LoRA r=16, alpha=32, dropout=0.05                                  |
+| **Training hw** | AWS g4dn.xlarge — NVIDIA T4 16 GB                                  |
+| **Task**        | Structured fraud signal classification (7-parameter JSON output)   |
 
 ---
 

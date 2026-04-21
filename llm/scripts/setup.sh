@@ -181,12 +181,12 @@ try:
     del model
 except Exception as exc:
     print(f"  WARN: {MODEL_ID} failed to load: {exc}")
-    print("  Falling back to microsoft/Phi-3-mini-4k-instruct")
+    print("  Falling back to mistralai/Mistral-7B-Instruct-v0.3")
     model = AutoModelForCausalLM.from_pretrained(
-        "microsoft/Phi-3-mini-4k-instruct",
+        "mistralai/Mistral-7B-Instruct-v0.3",
         quantization_config=bnb_config,
         device_map="auto",
-        trust_remote_code=True,
+        trust_remote_code=False,
     )
     if torch.cuda.is_available():
         alloc = torch.cuda.memory_allocated() / 1024**3

@@ -19,7 +19,7 @@
   ```
 - [ ] Pull base model from Hugging Face (choose one):
   - `meta-llama/Meta-Llama-3.1-8B-Instruct` (preferred, strong instruction following)
-  - `microsoft/Phi-3-mini-4k-instruct` (fallback if T4 VRAM is tight)
+  - `mistralai/Mistral-7B-Instruct-v0.3` (fallback if Llama access unavailable)
 - [ ] Verify 4-bit quantized model loads without OOM:
   ```python
   from transformers import AutoModelForCausalLM, BitsAndBytesConfig

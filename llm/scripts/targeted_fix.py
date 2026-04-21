@@ -214,15 +214,15 @@ def run_targeted_fix(
         )
         tokenizer = AutoTokenizer.from_pretrained(checkpoint)
     except Exception as exc:
-        print(f"  Fallback to Phi-3: {exc}")
+        print(f"  Fallback to Mistral-7B: {exc}")
         base_model = AutoModelForCausalLM.from_pretrained(
-            "microsoft/Phi-3-mini-4k-instruct",
+            "mistralai/Mistral-7B-Instruct-v0.3",
             quantization_config=bnb_config,
             device_map="auto",
-            trust_remote_code=True,
+            trust_remote_code=False,
         )
         tokenizer = AutoTokenizer.from_pretrained(
-            checkpoint, trust_remote_code=True)
+            checkpoint, trust_remote_code=False)
 
     tokenizer.pad_token = tokenizer.eos_token
 

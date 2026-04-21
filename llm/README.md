@@ -5,7 +5,7 @@ produces a structured 7-parameter fraud classifier, served as an
 OpenAI-compatible inference server.
 
 Target hardware: **AWS g4dn.xlarge** (NVIDIA T4, 16 GB VRAM).  
-Fallback model: `microsoft/Phi-3-mini-4k-instruct` (if T4 VRAM is exceeded).
+Fallback model: `mistralai/Mistral-7B-Instruct-v0.3` (if Llama 3.1 access is unavailable).
 
 ---
 
@@ -75,7 +75,7 @@ What `setup.sh` does:
 4. Installs PyTorch 2.x (cu121)
 5. Installs training packages (`transformers`, `peft`, `bitsandbytes`, `trl`)
 6. Installs experiment tracking (`wandb`, `mlflow`)
-7. Verifies 4-bit model load (Llama-3.1-8B → Phi-3-mini fallback)
+7. Verifies 4-bit model load (Llama-3.1-8B → Mistral-7B fallback)
 
 ---
 
@@ -298,16 +298,16 @@ journalctl -u fraud-llm -f
 
 ### `configs/base_config.yaml` (shared)
 
-| Key                                    | Value                                | Description                                                                        |
-| -------------------------------------- | ------------------------------------ | ---------------------------------------------------------------------------------- |
+| Key                                    | Value                                   | Description                                                                        |
+| -------------------------------------- | --------------------------------------- | ---------------------------------------------------------------------------------- |
 | `model.base_model_id`                  | `meta-llama/Meta-Llama-3.1-8B-Instruct` | Base model                                                                         |
-| `model.max_seq_length`                 | `4096`                               | Sequence length; raised from 2048 to fit RAG context (~500 tokens) + system prompt |
-| `quantization.load_in_4bit`            | `true`                               | NF4 4-bit                                                                          |
-| `lora.r`                               | `16`                                 | LoRA rank                                                                          |
-| `lora.lora_alpha`                      | `32`                                 | LoRA alpha                                                                         |
-| `training.num_train_epochs`            | `3`                                  | Epochs (overridden per run)                                                        |
-| `training.learning_rate`               | `2e-4`                               | LR (overridden per run)                                                            |
-| `training.per_device_train_batch_size` | `2`                                  | Batch (eff. 16 w/ grad accum 8)                                                    |
+| `model.max_seq_length`                 | `4096`                                  | Sequence length; raised from 2048 to fit RAG context (~500 tokens) + system prompt |
+| `quantization.load_in_4bit`            | `true`                                  | NF4 4-bit                                                                          |
+| `lora.r`                               | `16`                                    | LoRA rank                                                                          |
+| `lora.lora_alpha`                      | `32`                                    | LoRA alpha                                                                         |
+| `training.num_train_epochs`            | `3`                                     | Epochs (overridden per run)                                                        |
+| `training.learning_rate`               | `2e-4`                                  | LR (overridden per run)                                                            |
+| `training.per_device_train_batch_size` | `2`                                     | Batch (eff. 16 w/ grad accum 8)                                                    |
 
 Run configs (`run1_config.yaml`, `run2_config.yaml`) override any key from base.
 

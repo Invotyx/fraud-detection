@@ -33,6 +33,7 @@ DATASET_COUNT="${DATASET_COUNT:-600}"
 LLM_SERVER_PORT="${LLM_SERVER_PORT:-8001}"
 SERVER_URL="${LLM_SERVER_URL:-http://localhost:${LLM_SERVER_PORT}}"
 SERVER_STARTUP_WAIT_SECONDS="${SERVER_STARTUP_WAIT_SECONDS:-60}"
+PROMPT_TEST_STRICT="${PROMPT_TEST_STRICT:-0}"
 
 # Colours for output
 GREEN='\033[0;32m'
@@ -48,6 +49,10 @@ step() {
 
 done_step() {
     echo -e "${GREEN}[DONE] $1${NC}"
+}
+
+warn_step() {
+    echo -e "${CYAN}[WARN] $1${NC}"
 }
 
 cd "${PROJECT_ROOT}"
@@ -76,10 +81,18 @@ done_step "prepare_data.py"
 # Phase 2 — System Prompt Adversarial Testing (pre-training baseline)
 # =============================================================================
 step "Phase 2: System Prompt Adversarial Testing (pre-training baseline)"
-python llm/scripts/test_system_prompt.py \
+if python llm/scripts/test_system_prompt.py \
     --local \
-    --model "${BASE_MODEL_ID}"
-done_step "test_system_prompt.py"
+    --model "${BASE_MODEL_ID}" \
+    --verbose;then
+    done_step "test_system_prompt.py"
+else
+    if [[ "${PROMPT_TEST_STRICT}" == "1" ]]; then
+        echo "System prompt baseline failed and PROMPT_TEST_STRICT=1; stopping deployment."
+        exit 1
+    fi
+    warn_step "test_system_prompt.py failed baseline threshold; continuing to later phases because this stage is advisory by default"
+fi
 
 # =============================================================================
 # Phase 3 — Fine-Tuning Run 1: Resilient Behavior

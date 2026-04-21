@@ -664,7 +664,7 @@
           <div class="section-title">Connection</div>
           <div class="config-card">
             <label>API Base URL</label>
-            <input id="apiBase" type="url" value="http://localhost:8000" />
+            <input id="apiBase" type="url" value="" />
             <label>API Key</label>
             <input id="apiKey" type="text" value="dev-key-change-me" />
           </div>
@@ -958,10 +958,23 @@
    Init
    ========================================================================= */
       window.addEventListener("DOMContentLoaded", () => {
+        initializeApiBase();
         renderScenarios();
         checkHealth();
         setInterval(checkHealth, 15000);
       });
+
+      function initializeApiBase() {
+        const apiBaseInput = document.getElementById("apiBase");
+        if (!apiBaseInput || apiBaseInput.value) return;
+
+        if (window.location.protocol.startsWith("http")) {
+          apiBaseInput.value = `${window.location.protocol}//${window.location.hostname}:8000`;
+          return;
+        }
+
+        apiBaseInput.value = "http://localhost:8000";
+      }
 
       /* =========================================================================
    Render scenarios

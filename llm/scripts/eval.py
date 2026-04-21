@@ -29,7 +29,7 @@ from typing import Any, Dict, List, Optional, Tuple
 PARAMETERS = [
     "url_domain_risk", "fraud_intent", "prompt_injection",
     "context_deviation", "data_exfiltration", "obfuscation_evasion",
-    "unauthorized_action",
+    "unauthorized_action", "authority_spoof",
 ]
 
 SCORE_THRESHOLD = 0.5  # binarize: score >= threshold → positive

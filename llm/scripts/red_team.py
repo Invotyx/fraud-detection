@@ -24,7 +24,7 @@ from typing import Any, Dict, List, Optional
 PARAMETERS = [
     "url_domain_risk", "fraud_intent", "prompt_injection",
     "context_deviation", "data_exfiltration", "obfuscation_evasion",
-    "unauthorized_action",
+    "unauthorized_action", "authority_spoof",
 ]
 
 _SYSTEM_PROMPT_PATH = Path(__file__).parent.parent / \

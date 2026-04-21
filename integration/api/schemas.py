@@ -49,6 +49,8 @@ class FraudAnalysisResult(BaseModel):
         default_factory=lambda: ParameterScore(score=0.0))
     unauthorized_action: ParameterScore = Field(
         default_factory=lambda: ParameterScore(score=0.0))
+    authority_spoof: ParameterScore = Field(
+        default_factory=lambda: ParameterScore(score=0.0))
     unified_risk_score: float = Field(0.0, ge=0.0, le=1.0)
     decision: Decision = Decision.ALLOW
     explanation: str = ""

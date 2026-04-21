@@ -43,6 +43,7 @@ _PARAM_FIELDS = [
     "data_exfiltration",
     "obfuscation_evasion",
     "unauthorized_action",
+    "authority_spoof",
 ]
 
 

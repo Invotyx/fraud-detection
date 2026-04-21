@@ -20,10 +20,7 @@ from integration.api.schemas import (
     ParameterScore,
 )
 from integration.audit.logger import log_request, log_stage
-from integration.classifiers.context_deviation import (
-    check_context_deviation,
-    store_session_scope,
-)
+from integration.classifiers.context_deviation import check_context_deviation
 from integration.classifiers.ensemble import EnsembleResult, run_ensemble
 from integration.classifiers.exfiltration import detect_exfiltration
 from integration.classifiers.obfuscation import detect_obfuscation
@@ -36,9 +33,47 @@ from integration.risk_engine.aggregator import (
     aggregate,
 )
 from integration.sanitizer.sanitizer import sanitize
+from integration.vector_store.encoder import encode as embed_text
+from integration.vector_store.fraud_patterns import format_rag_context, retrieve_similar_patterns
 
 # ---------------------------------------------------------------------------
-# LLM client stub — replaced by real HTTP call in production
+# System prompt loader
+# ---------------------------------------------------------------------------
+
+_SYSTEM_PROMPT_CACHE: Optional[str] = None
+
+
+def _load_system_prompt() -> str:
+    """Load the LLM system prompt from the configured path (cached after first load)."""
+    global _SYSTEM_PROMPT_CACHE
+    if _SYSTEM_PROMPT_CACHE is not None:
+        return _SYSTEM_PROMPT_CACHE
+
+    settings = get_settings()
+    path = settings.llm_system_prompt_path
+
+    if not path:
+        # Default: bundled prompt next to this package
+        import os
+        path = os.path.join(
+            os.path.dirname(__file__), "..", "configs", "system_prompt.txt"
+        )
+
+    try:
+        with open(path) as fh:
+            _SYSTEM_PROMPT_CACHE = fh.read().strip()
+    except OSError:
+        # Fallback minimal prompt — safe operation even without the file
+        _SYSTEM_PROMPT_CACHE = (
+            "You are a fraud detection AI. Analyze the input and return a "
+            "JSON risk assessment with scores for each fraud parameter."
+        )
+
+    return _SYSTEM_PROMPT_CACHE
+
+
+# ---------------------------------------------------------------------------
+# LLM client
 # ---------------------------------------------------------------------------
 
 
@@ -47,35 +82,66 @@ async def _call_llm(
     *,
     timeout: float,
     llm_url: str,
+    llm_endpoint: str,
+    model_name: str,
+    rag_context: str = "",
 ) -> Optional[Dict[str, Any]]:
     """
-    POST sanitized text to the LLM inference server and return the parsed
-    JSON response, or None if the call fails / times out.
+    POST to the LLM inference server (OpenAI-compatible /v1/chat/completions).
+
+    When *rag_context* is provided it is prepended to the user message as a
+    clearly-labelled reference block so the model can use it for few-shot
+    context without being misled by the examples.
     """
     try:
         import httpx
 
-        payload = {"content": sanitized_text}
+        user_content = (
+            f"{rag_context}\n---\nINPUT TO ANALYZE:\n{sanitized_text}"
+            if rag_context
+            else sanitized_text
+        )
+        payload = {
+            "model": model_name,
+            "messages": [
+                {"role": "system", "content": _load_system_prompt()},
+                {"role": "user", "content": user_content},
+            ],
+            "temperature": 0,
+            "max_tokens": 512,
+        }
         async with httpx.AsyncClient(timeout=timeout) as client:
-            resp = await client.post(f"{llm_url}/analyze", json=payload)
+            resp = await client.post(f"{llm_url}{llm_endpoint}", json=payload)
             resp.raise_for_status()
-            return resp.json()
+            data = resp.json()
+            # Extract assistant message content from OpenAI response envelope
+            import json as _json
+            content = (
+                data.get("choices", [{}])[0]
+                .get("message", {})
+                .get("content", "")
+            )
+            return _json.loads(content) if content else None
     except Exception:
         return None
 
 
 # ---------------------------------------------------------------------------
-# ML classifier runner stub
+# ML classifier runner
 # ---------------------------------------------------------------------------
 
 async def _run_ml_classifiers(
     sanitized_text: str,
     session_id: Optional[str],
     task_scope: Optional[str],
+    conn: Any,
 ) -> Dict[str, float]:
     """
-    Run remaining ML classifiers in parallel.
-    Returns a dict of {parameter_name: score}.
+    Run ML classifiers in parallel.
+
+    context_deviation now uses pgvector via *conn* and runs as a native coroutine
+    (no asyncio.to_thread needed).  obfuscation / exfiltration remain CPU-bound
+    sync functions and are dispatched to the thread pool.
     """
     obfuscation_task = asyncio.create_task(
         asyncio.to_thread(detect_obfuscation, sanitized_text)
@@ -93,9 +159,9 @@ async def _run_ml_classifiers(
         "data_exfiltration": exfiltration_result.score,
     }
 
-    if session_id and task_scope:
-        deviation = await asyncio.to_thread(
-            check_context_deviation, sanitized_text, session_id, task_scope
+    if session_id:
+        deviation = await check_context_deviation(
+            sanitized_text, session_id, conn, task_scope
         )
         scores["context_deviation"] = deviation.score
     else:
@@ -151,21 +217,49 @@ async def run_pipeline(
     )
 
     # ------------------------------------------------------------------
-    # Step 2: Session scope storage (for context deviation)
+    # Step 2: Compute shared text embedding (once, reused across all steps)
     # ------------------------------------------------------------------
-    if request.session_id and request.task_scope:
-        await asyncio.to_thread(
-            store_session_scope, request.session_id, request.task_scope
-        )
+    text_embedding = await asyncio.to_thread(embed_text, sanitized.sanitized_text)
+
+    # ------------------------------------------------------------------
+    # Step 3: RAG — retrieve similar fraud patterns and format context
+    # ------------------------------------------------------------------
+    rag_context = ""
+    if settings.rag_enabled and text_embedding is not None:
+        try:
+            raw_conn = await db.get_raw_connection()
+            similar_patterns = await retrieve_similar_patterns(
+                raw_conn.driver_connection, text_embedding
+            )
+            if similar_patterns:
+                rag_context = format_rag_context(similar_patterns)
+                log_stage(
+                    "rag",
+                    trace_id=trace_id,
+                    patterns_found=len(similar_patterns),
+                    top_similarity=similar_patterns[0]["similarity"],
+                )
+        except Exception:
+            pass  # RAG failure is non-fatal — pipeline continues without it
 
     # ------------------------------------------------------------------
     # Steps 5a / 5b / 5c  (parallel)
     # ------------------------------------------------------------------
+    raw_conn_obj = None
+    try:
+        raw_conn_obj = await db.get_raw_connection()
+        driver_conn = raw_conn_obj.driver_connection
+    except Exception:
+        driver_conn = None
+
     llm_task = asyncio.create_task(
         _call_llm(
             sanitized.sanitized_text,
             timeout=float(settings.llm_request_timeout),
             llm_url=settings.llm_server_url,
+            llm_endpoint=settings.llm_endpoint,
+            model_name=settings.llm_model_name,
+            rag_context=rag_context,
         )
     )
 
@@ -174,11 +268,16 @@ async def run_pipeline(
             sanitized.sanitized_text,
             request.session_id,
             request.task_scope,
+            driver_conn,
         )
     )
 
+    ensemble_features: Dict[str, Any] = {"text": sanitized.sanitized_text}
+    if text_embedding is not None:
+        ensemble_features["embedding"] = text_embedding
+
     ensemble_task = asyncio.create_task(
-        run_ensemble({"text": sanitized.sanitized_text})
+        run_ensemble(ensemble_features)
     )
 
     try:

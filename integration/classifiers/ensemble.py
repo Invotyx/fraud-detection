@@ -80,7 +80,7 @@ class EnsembleModel:
 # ---------------------------------------------------------------------------
 
 def _placeholder_scorer(features: Dict[str, Any]) -> float:
-    """Placeholder scorer — returns 0.0 (not_implemented)."""
+    """Placeholder scorer — raises NotImplementedError (model not yet deployed)."""
     raise NotImplementedError("Model not yet deployed")
 
 
@@ -97,13 +97,56 @@ def _keyword_fraud_scorer(features: Dict[str, Any]) -> float:
     Basic keyword-based fraud signal scorer.
     Checks for known fraud-related keywords in content.
     """
-    content: str = features.get("content", "")
+    content: str = features.get("content", "") or features.get("text", "")
     if not content:
         return 0.0
 
     fraud_keywords = _FRAUD_KEYWORDS
     hits = sum(1 for kw in fraud_keywords if kw.lower() in content.lower())
     return min(1.0, hits * _KEYWORD_SCORE_INCREMENT)
+
+
+def _xgboost_embedding_scorer(features: Dict[str, Any]) -> float:
+    """
+    XGBoost scorer using 768-dim sentence embedding as feature vector.
+
+    When the trained model artefact is present at the path configured in
+    classifiers.yaml (ensemble.xgboost_model_path), it is loaded and used
+    for inference.  Otherwise raises NotImplementedError so the ensemble
+    gracefully excludes it from scoring.
+
+    Feature vector: the pre-computed 'embedding' key (List[float], 768-dim)
+    injected by pipeline.py before calling run_ensemble().
+    """
+    embedding = features.get("embedding")
+    if embedding is None:
+        raise NotImplementedError("No embedding provided for XGBoost scorer")
+
+    model_path: str = _MODEL_CFG.get("xgboost_transaction", {}).get(
+        "model_path", ""
+    )
+    if not model_path:
+        raise NotImplementedError(
+            "XGBoost model path not configured (ensemble.xgboost_transaction.model_path)"
+        )
+
+    import os
+    if not os.path.exists(model_path):
+        raise NotImplementedError(
+            f"XGBoost model artefact not found: {model_path}"
+        )
+
+    try:
+        import numpy as np
+        import xgboost as xgb  # type: ignore
+
+        model = xgb.Booster()
+        model.load_model(model_path)
+        X = np.array(embedding, dtype=np.float32).reshape(1, -1)
+        dmat = xgb.DMatrix(X)
+        return float(model.predict(dmat)[0])
+    except ImportError:
+        raise NotImplementedError("xgboost package not installed")
 
 
 # ---------------------------------------------------------------------------
@@ -128,7 +171,8 @@ DEFAULT_MODELS: List[EnsembleModel] = [
     EnsembleModel(
         name="xgboost_transaction",
         weight=_MODEL_CFG.get("xgboost_transaction", {}).get("weight", 0.40),
-        scorer=_placeholder_scorer,      # placeholder until trained
+        # embedding-based; degrades gracefully until model trained
+        scorer=_xgboost_embedding_scorer,
         timeout_seconds=_MODEL_CFG.get(
             "xgboost_transaction", {}).get("timeout_seconds", 2.0),
     ),

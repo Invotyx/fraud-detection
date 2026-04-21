@@ -4,6 +4,7 @@ Main API entrypoint wiring the full pipeline as HTTP endpoints.
 """
 from __future__ import annotations
 
+import asyncio
 import time
 from typing import AsyncGenerator
 from uuid import UUID, uuid4
@@ -63,6 +64,44 @@ def create_app() -> FastAPI:
         _engine = create_async_engine(
             settings.database_url, pool_pre_ping=True)
         app.state.engine = _engine
+
+        # Initialise pgvector tables and optionally seed fraud patterns
+        try:
+            from integration.vector_store.store import init_vector_tables
+            from integration.vector_store.fraud_patterns import (
+                is_knowledge_base_seeded,
+                seed_knowledge_base,
+            )
+            from integration.vector_store.encoder import get_encoder
+            import yaml
+            import os
+
+            rag_cfg_path = os.path.join(
+                os.path.dirname(__file__), "..", "configs", "classifiers.yaml"
+            )
+            with open(rag_cfg_path) as fh:
+                rag_cfg = yaml.safe_load(fh).get("rag", {})
+            seed_on_startup: bool = rag_cfg.get("seed_on_startup", True)
+
+            async with _engine.connect() as conn:
+                raw = await conn.get_raw_connection()
+                driver_conn = raw.driver_connection
+                await init_vector_tables(driver_conn)
+                if seed_on_startup:
+                    already_seeded = await is_knowledge_base_seeded(driver_conn)
+                    if not already_seeded:
+                        encoder = await asyncio.to_thread(get_encoder)
+                        if encoder is not None:
+                            count = await seed_knowledge_base(driver_conn, encoder)
+                            import logging
+                            logging.getLogger(__name__).info(
+                                "Fraud pattern knowledge base seeded with %d patterns.", count
+                            )
+        except Exception as exc:
+            import logging
+            logging.getLogger(__name__).warning(
+                "Vector store initialisation skipped: %s", exc
+            )
 
     @app.on_event("shutdown")
     async def _shutdown() -> None:

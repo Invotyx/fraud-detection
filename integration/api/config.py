@@ -20,6 +20,10 @@ class Settings(BaseSettings):
     # LLM inference server
     llm_server_url: str = "http://localhost:8001"
     llm_request_timeout: int = 10
+    llm_endpoint: str = "/v1/chat/completions"
+    llm_model_name: str = "fraud-detector-v1"
+    # path to system_prompt.txt; empty = use bundled default
+    llm_system_prompt_path: str = ""
 
     # Score blending weights (LLM vs rule-based; must sum to 1.0)
     llm_score_weight: float = 0.6
@@ -52,6 +56,9 @@ class Settings(BaseSettings):
     # Human-in-the-Loop (HITL)
     hitl_escalation_timeout_seconds: int = 3600
     hitl_queue_default_limit: int = 20
+
+    # RAG — fraud pattern retrieval
+    rag_enabled: bool = True
 
 
 @lru_cache

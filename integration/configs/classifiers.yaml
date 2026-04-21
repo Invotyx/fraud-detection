@@ -5,14 +5,35 @@
 # =============================================================================
 
 # ---------------------------------------------------------------------------
+# Shared embedding configuration
+# Changing model_id requires a new Alembic migration to update the vector
+# column dimension (embedding_dim) in session_embeddings and fraud_patterns.
+# ---------------------------------------------------------------------------
+embeddings:
+  model_id: "all-mpnet-base-v2" # upgraded from all-MiniLM-L6-v2 (384-dim → 768-dim)
+  dim: 768 # must match model output dimension
+  session_ttl_seconds: 3600 # seconds before session embeddings expire in pgvector
+  turn_history_max: 20 # maximum turns stored per session
+
+# ---------------------------------------------------------------------------
+# RAG — fraud pattern retrieval
+# ---------------------------------------------------------------------------
+rag:
+  enabled: true
+  top_k: 3 # number of similar fraud patterns to retrieve
+  min_similarity_threshold: 0.65 # cosine similarity floor for retrieval
+  max_context_tokens: 500 # approximate token budget for RAG prefix
+  seed_on_startup: true # seed fraud_patterns table at app startup if empty
+
+# ---------------------------------------------------------------------------
 # Context Deviation Classifier
 # ---------------------------------------------------------------------------
 context_deviation:
-  embedding_model_id: "all-MiniLM-L6-v2"
-  session_ttl_seconds: 3600 # Redis TTL for session scope embeddings
-  turn_history_max: 20 # max turns kept in session history
-  scope_key_prefix: "ctx:scope:"
-  history_key_prefix: "ctx:history:"
+  low_similarity_threshold: 0.40 # below this → scope deviation flag
+  escalation_threshold: 0.35 # baseline vs current turn → escalation flag
+  cross_session_lookback_seconds: 300 # window for coordinated attack detection
+  cross_session_top_k: 5 # similar sessions to check
+  cross_session_min_similarity: 0.85 # very high threshold to avoid false positives
 
 # ---------------------------------------------------------------------------
 # Ensemble Models
@@ -28,6 +49,9 @@ ensemble:
     xgboost_transaction:
       weight: 0.40
       timeout_seconds: 2.0
+      # Path to trained XGBoost model artefact (.ubj or .json).
+      # Leave empty until the model is trained — ensemble degrades gracefully.
+      model_path: "" # e.g. "checkpoints/xgboost_fraud_v1.ubj"
 
   # Keyword fraud scorer
   fraud_keywords:

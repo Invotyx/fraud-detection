@@ -28,7 +28,7 @@ services:
     restart: unless-stopped
 
   postgres:
-    image: ${POSTGRES_IMAGE:-postgres:16-alpine}
+    image: ${POSTGRES_IMAGE:-pgvector/pgvector:pg16}
     environment:
       POSTGRES_USER: ${POSTGRES_USER:-fraud}
       POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-fraud}

@@ -5,28 +5,27 @@ Ensures requests stay within the declared conversation/session scope.
 
 Signals:
 1. Cosine similarity between current request and declared task scope
-2. Topic shift detection across session turns
-3. Gradual escalation detection (turn N compared to turn 1 baseline)
+2. Topic shift detection across session turns (baseline vs current)
+3. Cross-session similarity (coordinated attack / wave detection)
+4. Keyword / regex fallback when the embedding model is unavailable
 
-Storage: Redis (session_id → task_scope embedding + turn history)
-Embedding model: sentence-transformers all-MiniLM-L6-v2 (lazy-loaded)
+Storage: pgvector (session_embeddings table) via vector_store.store
+Embedding: shared encoder from vector_store.encoder (all-mpnet-base-v2)
 """
 from __future__ import annotations
 import re as _re
 
-import json
-import hashlib
 import os
 import yaml
 from dataclasses import dataclass, field
-from typing import List, Optional, Tuple
+from typing import Any, List, Optional, Tuple
 
 # ---------------------------------------------------------------------------
-# Classifier config loader
+# Classifier config
 # ---------------------------------------------------------------------------
 
 
-def _load_classifier_cfg() -> dict:
+def _load_cfg() -> dict:
     cfg_path = os.path.join(
         os.path.dirname(__file__), "..", "configs", "classifiers.yaml"
     )
@@ -34,12 +33,16 @@ def _load_classifier_cfg() -> dict:
         return yaml.safe_load(fh).get("context_deviation", {})
 
 
-_CFG = _load_classifier_cfg()
-_EMBEDDING_MODEL_ID: str = _CFG.get("embedding_model_id", "all-MiniLM-L6-v2")
-_SESSION_TTL_SECONDS: int = int(_CFG.get("session_ttl_seconds", 3600))
-_TURN_HISTORY_MAX: int = int(_CFG.get("turn_history_max", 20))
-_SCOPE_KEY_PREFIX: str = _CFG.get("scope_key_prefix", "ctx:scope:")
-_HISTORY_KEY_PREFIX: str = _CFG.get("history_key_prefix", "ctx:history:")
+_CFG = _load_cfg()
+_LOW_SIMILARITY_THRESHOLD: float = float(
+    _CFG.get("low_similarity_threshold", 0.40))
+_ESCALATION_THRESHOLD: float = float(_CFG.get("escalation_threshold", 0.35))
+_CROSS_SESSION_LOOKBACK: int = int(
+    _CFG.get("cross_session_lookback_seconds", 300))
+_CROSS_SESSION_TOP_K: int = int(_CFG.get("cross_session_top_k", 5))
+_CROSS_SESSION_MIN_SIM: float = float(
+    _CFG.get("cross_session_min_similarity", 0.85))
+
 
 # ---------------------------------------------------------------------------
 # Result dataclass
@@ -48,136 +51,26 @@ _HISTORY_KEY_PREFIX: str = _CFG.get("history_key_prefix", "ctx:history:")
 
 @dataclass
 class DeviationResult:
-    score: float                     # 0.0 – 1.0
+    score: float                                  # 0.0 – 1.0
     flags: List[str] = field(default_factory=list)
-    # cosine similarity; None if no scope set
     similarity_to_scope: Optional[float] = None
     similarity_to_baseline: Optional[float] = None
+    # similar sessions in lookback window
+    cross_session_hits: int = 0
 
 
 # ---------------------------------------------------------------------------
-# Lazy-loaded embedding model
+# Cosine similarity (for L2-normalised embeddings)
 # ---------------------------------------------------------------------------
 
-_encoder = None
-
-
-def _get_encoder():
-    """Lazy-load sentence-transformers encoder. Returns None if not available."""
-    global _encoder
-    if _encoder is not None:
-        return _encoder
-    try:
-        from sentence_transformers import SentenceTransformer  # type: ignore
-        _encoder = SentenceTransformer(_EMBEDDING_MODEL_ID)
-        return _encoder
-    except Exception:
-        return None
-
-
-def _encode(text: str) -> Optional[list]:
-    """Return embedding as plain Python list, or None if model unavailable."""
-    enc = _get_encoder()
-    if enc is None:
-        return None
-    try:
-        return enc.encode(text, normalize_embeddings=True).tolist()
-    except Exception:
-        return None
-
-
-def _cosine_similarity(a: list, b: list) -> float:
-    """Compute cosine similarity between two normalized embedding vectors."""
+def _cosine_similarity(a: List[float], b: List[float]) -> float:
+    """Dot-product on normalised vectors equals cosine similarity."""
     dot = sum(x * y for x, y in zip(a, b))
     return max(0.0, min(1.0, dot))
 
 
 # ---------------------------------------------------------------------------
-# Redis session store helpers
-# ---------------------------------------------------------------------------
-
-def _get_redis():
-    """Return a Redis client or None if not available."""
-    try:
-        import redis  # type: ignore
-        from api.config import get_settings
-        settings = get_settings()
-        client = redis.from_url(settings.redis_url, decode_responses=True)
-        client.ping()
-        return client
-    except Exception:
-        return None
-
-
-def _scope_key(session_id: str) -> str:
-    return f"{_SCOPE_KEY_PREFIX}{session_id}"
-
-
-def _history_key(session_id: str) -> str:
-    return f"{_HISTORY_KEY_PREFIX}{session_id}"
-
-
-def store_session_scope(session_id: str, task_scope: str, ttl_seconds: int = _SESSION_TTL_SECONDS) -> bool:
-    """
-    Store the declared task scope and its embedding for a session.
-    Returns True on success, False if Redis unavailable (degrades gracefully).
-    """
-    r = _get_redis()
-    embedding = _encode(task_scope)
-    data = {"task_scope": task_scope, "embedding": embedding}
-    if r is not None:
-        r.setex(_scope_key(session_id), ttl_seconds, json.dumps(data))
-        return True
-    return False
-
-
-def append_turn(session_id: str, text: str, ttl_seconds: int = _SESSION_TTL_SECONDS) -> bool:
-    """
-    Append a turn embedding to the session history (list, max _TURN_HISTORY_MAX turns).
-    """
-    r = _get_redis()
-    if r is None:
-        return False
-    embedding = _encode(text)
-    if embedding is None:
-        return False
-    key = _history_key(session_id)
-    r.lpush(key, json.dumps(embedding))
-    r.ltrim(key, 0, _TURN_HISTORY_MAX - 1)
-    r.expire(key, ttl_seconds)
-    return True
-
-
-def _get_session_scope(session_id: str) -> Optional[dict]:
-    r = _get_redis()
-    if r is None:
-        return None
-    raw = r.get(_scope_key(session_id))
-    if raw is None:
-        return None
-    try:
-        return json.loads(raw)
-    except Exception:
-        return None
-
-
-def _get_turn_history(session_id: str) -> List[list]:
-    """Return list of stored turn embeddings (newest first)."""
-    r = _get_redis()
-    if r is None:
-        return []
-    raw_list = r.lrange(_history_key(session_id), 0, -1)
-    result = []
-    for raw in raw_list:
-        try:
-            result.append(json.loads(raw))
-        except Exception:
-            continue
-    return result
-
-
-# ---------------------------------------------------------------------------
-# Keyword-based scope deviation fallback (when embeddings unavailable)
+# Keyword-based scope similarity fallback (no embedding model required)
 # ---------------------------------------------------------------------------
 
 _SCOPE_KEYWORDS: dict[str, list[str]] = {
@@ -187,30 +80,22 @@ _SCOPE_KEYWORDS: dict[str, list[str]] = {
     "content_moderation": ["content", "image", "post", "comment", "moderate", "policy"],
 }
 
-# Topics that are always out of scope for a fraud analysis system
 _ALWAYS_OOT_PATTERNS = [
     r"\b(transfer|send|wire)\s+\$?\d+",
     r"\b(buy|purchase|order)\s+\w+\s+(for|using)\b",
     r"\b(delete|drop|truncate)\s+(table|database|db)\b",
     r"\b(call|dial|text|sms)\s+\+?\d{7,}\b",
 ]
-
 _OOT_COMPILED = [_re.compile(p, _re.I) for p in _ALWAYS_OOT_PATTERNS]
 
 
 def _keyword_similarity(text: str, task_scope: str) -> float:
-    """
-    Lightweight keyword-based similarity fallback when embeddings unavailable.
-    Returns a rough similarity score in [0, 1].
-    """
     text_lower = text.lower()
     scope_lower = task_scope.lower()
-    # Check known scope categories
-    for _scope_name, keywords in _SCOPE_KEYWORDS.items():
+    for _name, keywords in _SCOPE_KEYWORDS.items():
         if any(kw in scope_lower for kw in keywords):
             matches = sum(1 for kw in keywords if kw in text_lower)
             return min(1.0, matches / max(1, len(keywords)))
-    # Generic: word overlap
     scope_words = set(scope_lower.split())
     text_words = set(text_lower.split())
     overlap = len(scope_words & text_words)
@@ -226,97 +111,148 @@ def _is_always_out_of_scope(text: str) -> Tuple[bool, str]:
 
 
 # ---------------------------------------------------------------------------
-# Main enforcer
+# Public async API
 # ---------------------------------------------------------------------------
 
-_LOW_SIMILARITY_THRESHOLD = 0.40    # below this → flag deviation
-_ESCALATION_THRESHOLD = 0.35        # baseline vs current turn — escalation
+async def store_session_scope(
+    session_id: str,
+    task_scope: str,
+    conn: Any,
+) -> bool:
+    """
+    Embed *task_scope* and persist it as the session scope (turn_n=0).
+
+    Returns True on success, False when the embedding model is unavailable.
+    Degrades gracefully — keyword fallback is used in check_context_deviation.
+    """
+    from integration.vector_store.encoder import encode
+    from integration.vector_store.store import upsert_scope_embedding
+
+    embedding = encode(task_scope)
+    if embedding is None:
+        return False
+    await upsert_scope_embedding(conn, session_id, task_scope, embedding)
+    return True
 
 
-def check_context_deviation(
+async def check_context_deviation(
     text: str,
     session_id: str,
+    conn: Any,
     task_scope: Optional[str] = None,
 ) -> DeviationResult:
     """
-    Check if the current request deviates from the declared session scope.
+    Check whether the current request deviates from the declared session scope.
 
-    Args:
-        text:       The sanitized input text for this turn.
-        session_id: Session identifier for Redis lookup.
-        task_scope: If provided, store it and use it for comparison this call.
-                    If None, look up existing scope from Redis.
+    Parameters
+    ----------
+    text:       Sanitized input text for this turn.
+    session_id: Session identifier.
+    conn:       asyncpg connection (pgvector codec must be registered).
+    task_scope: If provided, store it and use it for this call.
+                If None, look up existing scope from the vector store.
 
-    Returns:
-        DeviationResult with score and flags.
+    Returns
+    -------
+    DeviationResult with score in [0, 1] and diagnostic flags.
     """
     if not text:
         return DeviationResult(score=0.0)
+
+    from integration.vector_store.encoder import encode
+    from integration.vector_store.store import (
+        append_turn_embedding,
+        find_similar_recent_sessions,
+        get_scope_embedding,
+        get_turn_history,
+        upsert_scope_embedding,
+    )
 
     flags: List[str] = []
     signal_scores: List[float] = []
     scope_similarity: Optional[float] = None
     baseline_similarity: Optional[float] = None
+    cross_session_hits: int = 0
 
-    # 1. Always-out-of-scope keywords (fast path, no embeddings needed)
+    # 1. Always-out-of-scope pattern check (fast path, no embedding needed)
     oot, oot_flag = _is_always_out_of_scope(text)
     if oot:
         flags.append(oot_flag)
         signal_scores.append(0.80)
 
-    # 2. Store scope if provided
+    # 2. Store scope if provided this turn
     if task_scope:
-        store_session_scope(session_id, task_scope)
+        scope_emb = encode(task_scope)
+        if scope_emb is not None:
+            await upsert_scope_embedding(conn, session_id, task_scope, scope_emb)
 
-    # 3. Compare to declared scope
-    scope_data = _get_session_scope(session_id)
-    current_embedding = _encode(text)
+    # 3. Encode current request
+    current_embedding = encode(text)
 
+    # 4. Compare to declared scope
+    scope_data = await get_scope_embedding(conn, session_id)
     if scope_data:
-        scope_embedding = scope_data.get("embedding")
-        stored_scope_text = scope_data.get("task_scope", "")
-
-        if scope_embedding and current_embedding:
+        scope_embedding, _scope_hash = scope_data
+        if current_embedding is not None:
             scope_similarity = _cosine_similarity(
                 scope_embedding, current_embedding)
         else:
-            # Fallback to keyword similarity
-            scope_similarity = _keyword_similarity(text, stored_scope_text)
+            # No embedding available — return uncertain middle value
+            scope_similarity = 0.50
 
         if scope_similarity < _LOW_SIMILARITY_THRESHOLD:
             flags.append(f"low_scope_similarity:{scope_similarity:.2f}")
-            # Score scales with how far below threshold
             deviation_magnitude = (
-                _LOW_SIMILARITY_THRESHOLD - scope_similarity) / _LOW_SIMILARITY_THRESHOLD
+                _LOW_SIMILARITY_THRESHOLD - scope_similarity
+            ) / _LOW_SIMILARITY_THRESHOLD
             signal_scores.append(min(0.90, 0.50 + deviation_magnitude * 0.50))
 
-    # 4. Compare to session baseline (turn 1)
-    history = _get_turn_history(session_id)
-    if history and current_embedding:
-        baseline_embedding = history[-1]  # oldest turn (lpush = newest first)
-        baseline_similarity = _cosine_similarity(
-            baseline_embedding, current_embedding)
-        if baseline_similarity < _ESCALATION_THRESHOLD:
-            flags.append(f"escalation_from_baseline:{baseline_similarity:.2f}")
-            signal_scores.append(0.70)
+    # 5. Compare to session baseline (oldest stored turn)
+    if current_embedding is not None:
+        history = await get_turn_history(conn, session_id, limit=None)
+        if history:
+            # newest-first list → oldest is last
+            baseline_embedding = history[-1]
+            baseline_similarity = _cosine_similarity(
+                baseline_embedding, current_embedding)
+            if baseline_similarity < _ESCALATION_THRESHOLD:
+                flags.append(
+                    f"escalation_from_baseline:{baseline_similarity:.2f}")
+                signal_scores.append(0.70)
 
-    # 5. Store current turn for future comparisons
-    if session_id:
-        append_turn(session_id, text)
+    # 6. Cross-session coordination detection
+    if current_embedding is not None and session_id:
+        similar_sessions = await find_similar_recent_sessions(
+            conn,
+            current_embedding,
+            current_session_id=session_id,
+            top_k=_CROSS_SESSION_TOP_K,
+            min_similarity=_CROSS_SESSION_MIN_SIM,
+            lookback_seconds=_CROSS_SESSION_LOOKBACK,
+        )
+        cross_session_hits = len(similar_sessions)
+        if cross_session_hits >= 3:
+            flags.append(
+                f"cross_session_coordination:{cross_session_hits}_sessions")
+            signal_scores.append(min(0.85, 0.60 + cross_session_hits * 0.05))
+
+    # 7. Persist current turn for future comparisons
+    if current_embedding is not None and session_id:
+        await append_turn_embedding(conn, session_id, text, current_embedding)
 
     if not signal_scores:
         return DeviationResult(
             score=0.0,
             similarity_to_scope=scope_similarity,
             similarity_to_baseline=baseline_similarity,
+            cross_session_hits=cross_session_hits,
         )
 
-    max_score = max(signal_scores)
-    final_score = min(1.0, max_score)
-
+    final_score = round(min(1.0, max(signal_scores)), 4)
     return DeviationResult(
-        score=round(final_score, 4),
+        score=final_score,
         flags=flags,
         similarity_to_scope=scope_similarity,
         similarity_to_baseline=baseline_similarity,
+        cross_session_hits=cross_session_hits,
     )

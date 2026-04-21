@@ -1,10 +1,14 @@
 from __future__ import annotations
 
+import os
 from enum import Enum
 from typing import Dict, List, Optional
 from uuid import UUID, uuid4
 
 from pydantic import BaseModel, Field
+
+# Loaded from env so it can be adjusted per deployment without a code change.
+_MAX_CONTENT_LENGTH: int = int(os.getenv("MAX_CONTENT_LENGTH", "50000"))
 
 
 # ---------------------------------------------------------------------------
@@ -62,7 +66,7 @@ class FraudAnalysisResult(BaseModel):
 
 
 class AnalyzeRequest(BaseModel):
-    content: str = Field(..., min_length=1, max_length=50_000)
+    content: str = Field(..., min_length=1, max_length=_MAX_CONTENT_LENGTH)
     session_id: Optional[str] = None
     # declared scope for context deviation checks
     task_scope: Optional[str] = None

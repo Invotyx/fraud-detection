@@ -104,14 +104,15 @@ async def _call_llm(
             if rag_context
             else sanitized_text
         )
+        _cfg = get_settings()
         payload = {
             "model": model_name,
             "messages": [
                 {"role": "system", "content": _load_system_prompt()},
                 {"role": "user", "content": user_content},
             ],
-            "temperature": 0,
-            "max_tokens": 512,
+            "temperature": _cfg.llm_temperature,
+            "max_tokens": _cfg.llm_max_tokens,
         }
         async with httpx.AsyncClient(timeout=timeout) as client:
             resp = await client.post(f"{llm_url}{llm_endpoint}", json=payload)
@@ -217,7 +218,7 @@ async def run_pipeline(
     # input, skip the full pipeline and return an immediate block.
     # ------------------------------------------------------------------
     guard_result = classify_injection(request.content, use_ml=False)
-    if guard_result.rule_match and guard_result.score >= 0.90:
+    if guard_result.rule_match and guard_result.score >= settings.guard_prefilter_score_threshold:
         log_stage("guard_prefilter", trace_id=trace_id,
                   score=guard_result.score, flags=guard_result.flags)
         _block_score = guard_result.score
@@ -234,7 +235,7 @@ async def run_pipeline(
         await log_request(
             db,
             trace_id=trace_id,
-            sanitized_text=request.content[:500],
+            sanitized_text=request.content[:settings.audit_log_content_max_length],
             raw_text=request.content,
             classifier_scores={"prompt_injection": _block_score},
             llm_response=None,

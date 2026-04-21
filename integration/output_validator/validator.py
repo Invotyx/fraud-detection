@@ -16,6 +16,7 @@ import re
 from dataclasses import dataclass, field
 from typing import Any, Dict, List, Optional, Tuple
 
+from api.config import get_settings
 from api.schemas import FraudAnalysisResult, Decision
 
 # ---------------------------------------------------------------------------
@@ -139,16 +140,19 @@ def _detect_unsafe_content(text: str) -> List[str]:
 def _validate_decision_consistency(result: FraudAnalysisResult) -> List[str]:
     """
     Verify the decision field is consistent with unified_risk_score.
-    Thresholds: allow<0.3, review<0.7, block>=0.7
+    Thresholds mirror Settings.risk_allow_threshold / risk_review_threshold.
     """
+    _s = get_settings()
+    allow_t = _s.risk_allow_threshold
+    review_t = _s.risk_review_threshold
     score = result.unified_risk_score
     decision = result.decision
 
-    if score < 0.30 and decision != Decision.ALLOW:
+    if score < allow_t and decision != Decision.ALLOW:
         return [f"decision_inconsistent:score={score:.3f} but decision={decision}"]
-    if 0.30 <= score < 0.70 and decision != Decision.REVIEW:
+    if allow_t <= score < review_t and decision != Decision.REVIEW:
         return [f"decision_inconsistent:score={score:.3f} but decision={decision}"]
-    if score >= 0.70 and decision != Decision.BLOCK:
+    if score >= review_t and decision != Decision.BLOCK:
         return [f"decision_inconsistent:score={score:.3f} but decision={decision}"]
     return []
 

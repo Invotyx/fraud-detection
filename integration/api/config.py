@@ -75,6 +75,28 @@ class Settings(BaseSettings):
     hitl_escalation_timeout_seconds: int = 3600
     hitl_queue_default_limit: int = 20
 
+    # Guard model pre-filter (pipeline.py Step 0)
+    guard_prefilter_score_threshold: float = 0.90
+
+    # LLM inference parameters
+    llm_max_tokens: int = 512
+    llm_temperature: float = 0.0
+
+    # Audit log — content truncation length for storage
+    audit_log_content_max_length: int = 500
+
+    # Input validation — maximum allowed content length (characters)
+    max_content_length: int = 50_000
+
+    # Session risk accumulation (classifiers/session_risk.py)
+    session_risk_window_seconds: int = 3600
+    session_risk_accumulate_threshold: float = 0.40
+    session_risk_escalate_threshold: float = 1.20
+
+    # Sanitizer — base64 decode heuristics
+    sanitizer_b64_printable_ratio: float = 0.70
+    sanitizer_b64_min_decoded_length: int = 10
+
     # RAG — fraud pattern retrieval
     rag_enabled: bool = True
 

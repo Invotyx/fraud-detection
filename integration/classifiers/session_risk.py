@@ -22,15 +22,13 @@ from __future__ import annotations
 import time
 from dataclasses import dataclass
 
+from api.config import get_settings
 
 # ---------------------------------------------------------------------------
-# Tuneable constants
+# Fixed implementation constant (not user-tunable)
 # ---------------------------------------------------------------------------
 
 _SESSION_KEY_PREFIX = "session_risk:"
-WINDOW_SECONDS = 3600          # rolling 1-hour window
-ACCUMULATE_THRESHOLD = 0.40    # minimum single-request score that counts
-SESSION_ESCALATE_THRESHOLD = 1.20  # sum that triggers session-level escalation
 
 
 # ---------------------------------------------------------------------------
@@ -66,6 +64,11 @@ async def accumulate_session_injection(
             accumulated_score=0.0, request_count=0, escalated=False
         )
 
+    _s = get_settings()
+    window_seconds = _s.session_risk_window_seconds
+    accumulate_threshold = _s.session_risk_accumulate_threshold
+    escalate_threshold = _s.session_risk_escalate_threshold
+
     key = f"{_SESSION_KEY_PREFIX}{session_id}"
     now = time.time()
     # Each sorted-set member encodes both the timestamp and the score so we can
@@ -77,9 +80,9 @@ async def accumulate_session_injection(
         # 1. Add this request's score
         pipe.zadd(key, {member: now})
         # 2. Prune entries outside the rolling window
-        pipe.zremrangebyscore(key, 0, now - WINDOW_SECONDS)
+        pipe.zremrangebyscore(key, 0, now - window_seconds)
         # 3. Refresh TTL so idle sessions expire automatically
-        pipe.expire(key, int(WINDOW_SECONDS))
+        pipe.expire(key, int(window_seconds))
         # 4. Fetch all remaining members
         pipe.zrange(key, 0, -1)
         _, _, _, members = await pipe.execute()
@@ -90,13 +93,13 @@ async def accumulate_session_injection(
             try:
                 _, score_str = m.rsplit(":", 1)
                 score = float(score_str)
-                if score >= ACCUMULATE_THRESHOLD:
+                if score >= accumulate_threshold:
                     total += score
                     count += 1
             except (ValueError, AttributeError):
                 pass  # corrupt member — skip gracefully
 
-        escalated = total >= SESSION_ESCALATE_THRESHOLD
+        escalated = total >= escalate_threshold
         return SessionRiskResult(
             accumulated_score=round(total, 3),
             request_count=count,

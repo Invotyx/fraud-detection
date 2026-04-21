@@ -19,6 +19,8 @@ import unicodedata
 from typing import List, Tuple
 from urllib.parse import unquote
 
+from api.config import get_settings
+
 import bleach
 from bs4 import BeautifulSoup, Comment
 
@@ -211,7 +213,8 @@ def _detect_encoding_anomalies(text: str) -> Tuple[str, List[str]]:
             printable_ratio = sum(
                 1 for c in decoded_str if c.isprintable()
             ) / max(len(decoded_str), 1)
-            if printable_ratio > 0.7 and len(decoded_str) > 10:
+            if printable_ratio > get_settings().sanitizer_b64_printable_ratio \
+                    and len(decoded_str) > get_settings().sanitizer_b64_min_decoded_length:
                 anomalies.append(f"base64_blob_decoded:{decoded_str[:80]}")
                 result = result.replace(blob, decoded_str)
         except Exception:

@@ -21,6 +21,16 @@ echo "========================================="
 # ---------------------------------------------------------------------------
 echo "[1/8] Installing system dependencies..."
 sudo apt-get update -qq
+# software-properties-common provides add-apt-repository, needed for deadsnakes
+sudo apt-get install -y --no-install-recommends software-properties-common
+
+# Python 3.11 is not in Ubuntu 22.04 default repos — add the deadsnakes PPA
+if ! dpkg -l python${PYTHON_VERSION} &>/dev/null; then
+    echo "  Adding deadsnakes PPA for Python ${PYTHON_VERSION}..."
+    sudo add-apt-repository -y ppa:deadsnakes/ppa
+    sudo apt-get update -qq
+fi
+
 sudo apt-get install -y --no-install-recommends \
     build-essential git curl wget unzip \
     python${PYTHON_VERSION} python${PYTHON_VERSION}-venv python${PYTHON_VERSION}-dev \

@@ -132,6 +132,7 @@ pip install -q \
     bitsandbytes==0.44.1 \
     accelerate==0.34.2 \
     trl==0.11.4 \
+    rich \
     sentencepiece \
     einops \
     scipy \

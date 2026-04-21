@@ -24,7 +24,7 @@ services:
       redis:
         condition: service_healthy
     volumes:
-      - .:/app
+      - .:/app/integration
     restart: unless-stopped
 
   postgres:

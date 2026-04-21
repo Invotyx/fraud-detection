@@ -4,7 +4,7 @@ All WHOIS calls are skipped (skip_whois=True) to keep tests fast and offline.
 """
 import pytest
 
-from classifiers.url_risk import (
+from integration.classifiers.url_risk import (
     URLRiskResult,
     _is_direct_ip,
     _levenshtein,

@@ -16,8 +16,8 @@ import re
 from dataclasses import dataclass, field
 from typing import Any, Dict, List, Optional, Tuple
 
-from api.config import get_settings
-from api.schemas import FraudAnalysisResult, Decision
+from integration.api.config import get_settings
+from integration.api.schemas import FraudAnalysisResult, Decision
 
 # ---------------------------------------------------------------------------
 # Result dataclass

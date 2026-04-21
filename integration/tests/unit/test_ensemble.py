@@ -5,7 +5,7 @@ import asyncio
 import pytest
 import pytest_asyncio
 
-from classifiers.ensemble import (
+from integration.classifiers.ensemble import (
     DEFAULT_MODELS,
     EnsembleModel,
     EnsembleResult,

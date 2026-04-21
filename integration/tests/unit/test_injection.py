@@ -4,7 +4,7 @@ ML layer is disabled (use_ml=False) for fast, deterministic tests.
 """
 import pytest
 
-from classifiers.injection import (
+from integration.classifiers.injection import (
     InjectionResult,
     classify_injection,
     scan_for_indirect_injection,

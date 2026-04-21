@@ -4,8 +4,8 @@ All tests pass weights and thresholds directly (no file I/O).
 """
 import pytest
 
-from api.schemas import Decision
-from risk_engine.aggregator import (
+from integration.api.schemas import Decision
+from integration.risk_engine.aggregator import (
     AggregationResult,
     HardOverrideFlags,
     aggregate,

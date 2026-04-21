@@ -19,12 +19,12 @@ import unicodedata
 from typing import List, Tuple
 from urllib.parse import unquote
 
-from api.config import get_settings
+from integration.api.config import get_settings
 
 import bleach
 from bs4 import BeautifulSoup, Comment
 
-from api.schemas import SanitizedResult
+from integration.api.schemas import SanitizedResult
 
 # ---------------------------------------------------------------------------
 # Constants

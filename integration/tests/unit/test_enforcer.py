@@ -4,7 +4,7 @@ Tests use inline policy dicts to avoid file I/O.
 """
 import pytest
 
-from policies.enforcer import (
+from integration.policies.enforcer import (
     EnforcementResult,
     check_tool_allowed,
     check_tool_scope,

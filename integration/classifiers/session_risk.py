@@ -22,7 +22,7 @@ from __future__ import annotations
 import time
 from dataclasses import dataclass
 
-from api.config import get_settings
+from integration.api.config import get_settings
 
 # ---------------------------------------------------------------------------
 # Fixed implementation constant (not user-tunable)

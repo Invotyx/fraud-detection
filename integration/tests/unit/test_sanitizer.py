@@ -8,7 +8,7 @@ import hashlib
 
 import pytest
 
-from sanitizer.sanitizer import sanitize
+from integration.sanitizer.sanitizer import sanitize
 
 
 # ---------------------------------------------------------------------------

@@ -6,7 +6,7 @@ Redis and embedding calls are patched to ensure offline execution.
 import pytest
 from unittest.mock import patch, MagicMock
 
-from classifiers.context_deviation import (
+from integration.classifiers.context_deviation import (
     DeviationResult,
     check_context_deviation,
     _keyword_similarity,

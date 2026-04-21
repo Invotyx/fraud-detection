@@ -3,8 +3,8 @@ Unit tests for the Output Validation Module.
 """
 import pytest
 
-from api.schemas import Decision, FraudAnalysisResult, ParameterScore
-from output_validator.validator import ValidationResult, validate_output
+from integration.api.schemas import Decision, FraudAnalysisResult, ParameterScore
+from integration.output_validator.validator import ValidationResult, validate_output
 
 
 # ---------------------------------------------------------------------------

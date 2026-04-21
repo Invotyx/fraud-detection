@@ -20,7 +20,7 @@ from typing import Any, Dict, List, Optional
 from sqlalchemy import text
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from api.schemas import Decision
+from integration.api.schemas import Decision
 
 # ---------------------------------------------------------------------------
 # SQLAlchemy model (declarative base-free — raw table references for simplicity)

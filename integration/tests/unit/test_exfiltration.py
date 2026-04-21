@@ -4,7 +4,7 @@ Presidio is disabled for all tests (use_presidio=False).
 """
 import pytest
 
-from classifiers.exfiltration import ExfiltrationResult, detect_exfiltration
+from integration.classifiers.exfiltration import ExfiltrationResult, detect_exfiltration
 
 
 # ---------------------------------------------------------------------------

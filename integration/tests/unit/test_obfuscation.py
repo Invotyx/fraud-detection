@@ -3,7 +3,7 @@ Unit tests for the Obfuscation / Evasion Detection Classifier.
 """
 import pytest
 
-from classifiers.obfuscation import (
+from integration.classifiers.obfuscation import (
     ObfuscationResult,
     detect_obfuscation,
     _normalize_fullwidth,

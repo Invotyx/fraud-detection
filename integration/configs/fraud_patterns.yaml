@@ -217,3 +217,55 @@ patterns:
       Government impersonation via free/suspicious TLD: a Pakistani scam URL
       using .cc, .tk, .ml, .ga, or .cf instead of the legitimate .gov.pk
       domain — e.g. https://ecodfu-ps.cc/pk or https://psca-fines.tk/pay
+
+  # -------------------------------------------------------------------------
+  # authority_spoof — universal bank/govt impersonation rules
+  # -------------------------------------------------------------------------
+  - type: authority_spoof
+    severity: 0.92
+    text: >
+      Your bank account has been suspended due to suspicious activity.
+      Click the link below to verify your identity and restore access:
+      https://secure-bank-verify.com/account-restore
+
+  - type: authority_spoof
+    severity: 0.90
+    text: >
+      IRS: You have an outstanding tax debt. To avoid legal action pay
+      immediately at https://irs-payment-portal.net/settle or call and
+      provide your SSN and bank account number.
+
+  - type: authority_spoof
+    severity: 0.90
+    text: >
+      Dear customer, your Visa card has been blocked. Please click here
+      to re-activate it: https://visa-secure.cc/reactivate and enter
+      your card number, CVV, and expiry date.
+
+  - type: authority_spoof
+    severity: 0.88
+    text: >
+      HMRC: You are owed a tax refund. To receive it, verify your bank
+      details at https://hmrc-refund.tk/claim within 48 hours or the
+      refund will be cancelled.
+
+  - type: authority_spoof
+    severity: 0.88
+    text: >
+      Important: Your social security number has been compromised. Call
+      1-800-XXX-XXXX immediately and provide your SSN and date of birth
+      to protect your identity.
+
+  - type: authority_spoof
+    severity: 0.85
+    text: >
+      Your PayPal account shows unauthorized transactions. Reply to this
+      message with your account password and OTP to confirm your identity
+      and reverse the charges.
+
+  - type: authority_spoof
+    severity: 0.85
+    text: >
+      Police Cybercrime Division: Your IP address has been linked to
+      illegal activity. Pay PKR 50,000 fine at https://cybercrime-pk.cc/pay
+      to avoid arrest and court proceedings.

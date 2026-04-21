@@ -17,6 +17,7 @@ import ipaddress
 import math
 import os
 import re
+import socket
 import yaml
 from dataclasses import dataclass, field
 from datetime import datetime, timezone
@@ -190,6 +191,133 @@ def _get_domain_age_days(domain: str) -> Optional[int]:
 
 
 # ---------------------------------------------------------------------------
+# WHOIS registrar country + ASN org country mismatch
+# ---------------------------------------------------------------------------
+
+# Countries that are disproportionately used as anonymising registrars or
+# bulletproof hosting for phishing.  Presence alone is not a block — it
+# only contributes when combined with a mismatch against the brand's expected
+# country.  List is intentionally conservative to avoid geo-biased FPs.
+_BULLETPROOF_COUNTRIES: frozenset[str] = frozenset([
+    "SC",  # Seychelles
+    "VU",  # Vanuatu
+    "WS",  # Samoa
+    "TO",  # Tonga
+    "NU",  # Niue
+    "TK",  # Tokelau
+    "BZ",  # Belize
+    "PA",  # Panama
+])
+
+
+def _whois_registrar_country(domain: str) -> Optional[str]:
+    """Return ISO-3166-1 alpha-2 country from WHOIS registrant country field."""
+    try:
+        import whois  # type: ignore
+        w = whois.whois(domain)
+        country = w.get("country") or w.get("registrant_country")
+        if isinstance(country, list):
+            country = country[0]
+        if isinstance(country, str):
+            return country.upper().strip()[:2]
+    except Exception:
+        pass
+    return None
+
+
+def _asn_country(hostname: str) -> Optional[str]:
+    """
+    Resolve hostname → IP → ASN country via Team Cymru DNS service
+    (whois.cymru.com style origin lookup over DNS TXT).
+
+    Returns ISO-3166-1 alpha-2 country code, or None on any failure.
+    This is a best-effort check; failures are silently ignored so they
+    never block a legitimate request.
+    """
+    try:
+        import dns.resolver  # dnspython already in requirements
+        # Resolve hostname to IPv4
+        answers = dns.resolver.resolve(hostname, "A", lifetime=3)
+        ip_str = str(answers[0])
+        # Reverse the octets for the Cymru DNS query
+        octets = ip_str.split(".")
+        if len(octets) != 4:
+            return None
+        reversed_ip = ".".join(reversed(octets))
+        txt_name = f"{reversed_ip}.origin.asn.cymru.com"
+        txt_answers = dns.resolver.resolve(txt_name, "TXT", lifetime=3)
+        # Response: "<ASN> | <IP/cidr> | <CC> | <registry> | <date>"
+        raw = str(txt_answers[0]).strip('"')
+        parts = [p.strip() for p in raw.split("|")]
+        if len(parts) >= 3:
+            cc = parts[2].upper()[:2]
+            return cc if len(cc) == 2 and cc.isalpha() else None
+    except Exception:
+        pass
+    return None
+
+
+def _check_asn_country_mismatch(
+    hostname: str,
+    registered_domain: str,
+    brand_match: Optional[str],
+) -> Tuple[bool, str]:
+    """
+    Return (mismatch_detected, flag_string).
+
+    A mismatch is flagged when:
+    (a) The brand is known (brand_match is not None) AND the ASN/WHOIS
+        country is inconsistent with the brand's expected origin, OR
+    (b) No brand match but the WHOIS registrant country is a known
+        bulletproof-hosting jurisdiction.
+
+    This is intentionally conservative — a single country source being
+    unavailable will NOT trigger a false positive.
+    """
+    asn_cc = _asn_country(hostname)
+    whois_cc = _whois_registrar_country(registered_domain)
+
+    if not asn_cc and not whois_cc:
+        # No data — cannot conclude anything
+        return False, ""
+
+    # Brand-specific check: major US/EU brands hosted on non-US/EU infrastructure
+    if brand_match:
+        brand_tld_parts = tldextract.extract(brand_match)
+        brand_tld = brand_tld_parts.suffix  # "com", "gov.pk", etc.
+        # If brand is a .gov.pk / .org.pk domain we expect PK-registered hosting
+        expected_cc: Optional[str] = None
+        if brand_tld.endswith(".pk") or brand_tld == "pk":
+            expected_cc = "PK"
+        elif brand_tld.endswith(".uk"):
+            expected_cc = "GB"
+        elif brand_tld.endswith(".au"):
+            expected_cc = "AU"
+        elif brand_tld.endswith(".in"):
+            expected_cc = "IN"
+        elif brand_tld.endswith(".ca"):
+            expected_cc = "CA"
+        elif brand_tld in ("com", "net", "org"):
+            expected_cc = "US"  # most .com brands are US-hosted
+
+        if expected_cc:
+            mismatches = []
+            if asn_cc and asn_cc != expected_cc:
+                mismatches.append(f"asn:{asn_cc}≠{expected_cc}")
+            if whois_cc and whois_cc != expected_cc:
+                mismatches.append(f"whois:{whois_cc}≠{expected_cc}")
+            if mismatches:
+                return True, ",".join(mismatches)
+    else:
+        # No brand — flag bulletproof-hosting countries in WHOIS
+        if whois_cc and whois_cc in _BULLETPROOF_COUNTRIES:
+            return True, f"bulletproof_registrar:{whois_cc}"
+
+    return False, ""
+
+
+
+# ---------------------------------------------------------------------------
 # Lookalike detection
 # ---------------------------------------------------------------------------
 
@@ -265,9 +393,11 @@ def analyze_url(url: str, skip_whois: bool = False) -> URLRiskResult:
         raw_score = max(raw_score, SCORE_WEIGHTS["high_entropy"])
 
     # --- Check 5: Lookalike domain ---
+    lookalike_brand: Optional[str] = None
     if registered_domain and not _is_direct_ip(hostname):
         is_like, matched = _is_lookalike(registered_domain)
         if is_like:
+            lookalike_brand = matched
             flags.append(f"lookalike_of:{matched}")
             raw_score = max(raw_score, SCORE_WEIGHTS["lookalike"])
 
@@ -277,6 +407,15 @@ def analyze_url(url: str, skip_whois: bool = False) -> URLRiskResult:
         if age_days is not None and age_days < DOMAIN_AGE_THRESHOLD_DAYS:
             flags.append(f"young_domain:{age_days}d")
             raw_score = max(raw_score, SCORE_WEIGHTS["young_domain"])
+
+    # --- Check 7: ASN / WHOIS country mismatch ---
+    if not skip_whois and hostname and not _is_direct_ip(hostname):
+        mismatch, mismatch_detail = _check_asn_country_mismatch(
+            hostname, registered_domain, lookalike_brand
+        )
+        if mismatch:
+            flags.append(f"asn_country_mismatch:{mismatch_detail}")
+            raw_score = max(raw_score, SCORE_WEIGHTS["asn_country_mismatch"])
 
     # Clamp to [0.0, 1.0]
     score = min(1.0, raw_score)

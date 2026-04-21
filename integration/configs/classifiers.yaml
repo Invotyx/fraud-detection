@@ -94,6 +94,7 @@ url_risk:
     young_domain: 0.60
     high_entropy: 0.55
     suspicious_tld: 0.55
+    asn_country_mismatch: 0.65
     lookalike: 0.70
     shortener: 0.40
 
@@ -150,3 +151,21 @@ url_risk:
     - "ubldigital.com"
     - "jazzcash.com.pk"
     - "easypaisa.com.pk"
+
+# ---------------------------------------------------------------------------
+# Authority Spoof Classifier
+# Detects messages that (a) claim to be from a bank / government and contain
+# a payment link, or (b) ask the recipient to share sensitive credentials.
+# Both patterns are globally universal — not region-specific.
+# ---------------------------------------------------------------------------
+authority_spoof:
+  score_weights:
+    # Claimed authority + URL + CTA (click/pay/verify/settle here)
+    authority_link: 0.72
+    # Message asks recipient to share OTP, PIN, password, card/account number, etc.
+    sensitive_info_request: 0.80
+
+  # Override the authority keyword list here if needed.
+  # Defaults (in authority_spoof.py) cover banks, payment apps, and government
+  # agencies across US/UK/AU/CA/PK/IN — extend here without code changes.
+  authority_keywords: []   # empty = use classifier defaults

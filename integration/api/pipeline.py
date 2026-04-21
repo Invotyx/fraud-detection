@@ -21,6 +21,7 @@ from integration.api.schemas import (
 )
 from integration.audit.logger import log_request, log_stage
 from integration.classifiers.context_deviation import check_context_deviation
+from integration.classifiers.authority_spoof import detect_authority_spoof
 from integration.classifiers.ensemble import EnsembleResult, run_ensemble
 from integration.classifiers.exfiltration import detect_exfiltration
 from integration.classifiers.obfuscation import detect_obfuscation
@@ -149,14 +150,18 @@ async def _run_ml_classifiers(
     exfiltration_task = asyncio.create_task(
         asyncio.to_thread(detect_exfiltration, sanitized_text)
     )
+    authority_spoof_task = asyncio.create_task(
+        asyncio.to_thread(detect_authority_spoof, sanitized_text)
+    )
 
-    obfuscation_result, exfiltration_result = await asyncio.gather(
-        obfuscation_task, exfiltration_task
+    obfuscation_result, exfiltration_result, authority_spoof_result = await asyncio.gather(
+        obfuscation_task, exfiltration_task, authority_spoof_task
     )
 
     scores: Dict[str, float] = {
         "obfuscation_evasion": obfuscation_result.score,
         "data_exfiltration": exfiltration_result.score,
+        "authority_spoof": authority_spoof_result.score,
     }
 
     if session_id:
@@ -291,7 +296,8 @@ async def run_pipeline(
         log_stage("parallel_stages", trace_id=trace_id, status="timeout")
         llm_response_raw = None
         ml_scores = {"obfuscation_evasion": 0.0,
-                     "data_exfiltration": 0.0, "context_deviation": 0.0}
+                     "data_exfiltration": 0.0, "context_deviation": 0.0,
+                     "authority_spoof": 0.0}
         ensemble_result = None
 
     ensemble_result: Optional[EnsembleResult]
@@ -325,12 +331,14 @@ async def run_pipeline(
         "obfuscation_evasion": ml_scores.get("obfuscation_evasion", 0.0),
         "data_exfiltration": ml_scores.get("data_exfiltration", 0.0),
         "context_deviation": ml_scores.get("context_deviation", 0.0),
+        "authority_spoof": ml_scores.get("authority_spoof", 0.0),
     }
 
     if llm_response_raw:
         for param in ("url_domain_risk", "fraud_intent", "prompt_injection",
                       "context_deviation", "data_exfiltration",
-                      "obfuscation_evasion", "unauthorized_action"):
+                      "obfuscation_evasion", "unauthorized_action",
+                      "authority_spoof"):
             block = llm_response_raw.get(param, {})
             if isinstance(block, dict) and "score" in block:
                 # Blend LLM score with rule-based score (weights from settings)
@@ -344,6 +352,10 @@ async def run_pipeline(
         ))
         param_scores.setdefault("unauthorized_action", float(
             (llm_response_raw.get("unauthorized_action") or {}).get("score", 0.0)
+        ))
+        param_scores.setdefault("authority_spoof", max(
+            param_scores.get("authority_spoof", 0.0),
+            float((llm_response_raw.get("authority_spoof") or {}).get("score", 0.0)),
         ))
     else:
         param_scores.setdefault("fraud_intent", 0.0)

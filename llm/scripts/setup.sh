@@ -10,7 +10,9 @@ set -euo pipefail
 PYTHON_VERSION="3.11"
 VENV_DIR="${HOME}/venv"
 CUDA_VERSION="12.1"
-CUDA_TOOLKIT_URL="https://developer.download.nvidia.com/compute/cuda/repos/ubuntu2204/x86_64"
+# Detect Ubuntu release so the correct CUDA repo URL is used (22.04 or 24.04)
+UBUNTU_RELEASE=$(lsb_release -rs | tr -d '.')   # e.g. 2204 or 2404
+CUDA_TOOLKIT_URL="https://developer.download.nvidia.com/compute/cuda/repos/ubuntu${UBUNTU_RELEASE}/x86_64"
 
 echo "========================================="
 echo " Fraud Detection LLM — Environment Setup"
@@ -60,8 +62,26 @@ if ! command -v nvcc &>/dev/null; then
     echo 'export LD_LIBRARY_PATH=/usr/local/cuda-12.1/lib64:$LD_LIBRARY_PATH' >> ~/.bashrc
     # shellcheck disable=SC1090
     source ~/.bashrc
+fi
+
+# Install the NVIDIA display driver separately — required for nvidia-smi and
+# bitsandbytes CUDA kernels. Driver 535 supports CUDA 12.x and works on both
+# Ubuntu 22.04 and 24.04. Skip if already present.
+if ! command -v nvidia-smi &>/dev/null; then
+    echo "[2b/8] Installing NVIDIA driver 535..."
+    sudo apt-get install -y --no-install-recommends \
+        nvidia-driver-535 \
+        nvidia-utils-535
+    echo ""
+    echo "================================================================"
+    echo " REBOOT REQUIRED: NVIDIA driver was just installed."
+    echo " Run: sudo reboot"
+    echo " Then re-run: bash llm/scripts/setup.sh"
+    echo " Steps 1-2 will be skipped automatically on the next run."
+    echo "================================================================"
+    exit 0
 else
-    echo "[2/8] CUDA already installed — skipping."
+    echo "[2b/8] NVIDIA driver already present — skipping."
 fi
 
 # ---------------------------------------------------------------------------

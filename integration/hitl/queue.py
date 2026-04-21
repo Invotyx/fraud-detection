@@ -74,11 +74,43 @@ _ESCALATE_SQL = text("""
     RETURNING id
 """)
 
+_CREATE_HITL_TABLE = text("""
+    CREATE TABLE IF NOT EXISTS hitl_queue (
+        id UUID PRIMARY KEY,
+        request_id UUID NOT NULL,
+        created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+        unified_risk_score DOUBLE PRECISION NOT NULL,
+        classifier_scores JSONB NOT NULL,
+        llm_response JSONB NULL,
+        decision_pending VARCHAR(20) NULL,
+        reviewed_by VARCHAR(100) NULL,
+        reviewed_at TIMESTAMPTZ NULL,
+        reviewer_decision VARCHAR(20) NULL,
+        reviewer_notes TEXT NULL,
+        escalated_at TIMESTAMPTZ NULL
+    )
+""")
+
+_CREATE_HITL_REVIEWED_AT_INDEX = text(
+    "CREATE INDEX IF NOT EXISTS ix_hitl_queue_reviewed_at ON hitl_queue (reviewed_at)"
+)
+
+_CREATE_HITL_CREATED_AT_INDEX = text(
+    "CREATE INDEX IF NOT EXISTS ix_hitl_queue_created_at ON hitl_queue (created_at)"
+)
+
 # ---------------------------------------------------------------------------
 # Queue operations
 # ---------------------------------------------------------------------------
 
 import json
+
+
+async def ensure_hitl_schema(db: AsyncSession) -> None:
+    """Create HITL queue tables and indexes if they do not exist."""
+    await db.execute(_CREATE_HITL_TABLE)
+    await db.execute(_CREATE_HITL_REVIEWED_AT_INDEX)
+    await db.execute(_CREATE_HITL_CREATED_AT_INDEX)
 
 
 async def enqueue(

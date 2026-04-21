@@ -1,5 +1,3 @@
-version: "3.9"
-
 # Copy .env.example → .env and fill in real values before running.
 # docker-compose automatically loads .env from the same directory.
 

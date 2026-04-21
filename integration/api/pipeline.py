@@ -531,19 +531,26 @@ async def run_pipeline(
         "override_reason": agg.override_reason,
     }
 
-    await log_request(
-        db,
-        trace_id=trace_id,
-        sanitized_text=sanitized.sanitized_text,
-        raw_text=request.content,
-        classifier_scores=param_scores,
-        llm_response=llm_response_raw,
-        unified_risk_score=agg.unified_risk_score,
-        decision=agg.decision.value,
-        flags=flags_payload,
-        hitl_required=hitl_pending,
-        processing_time_ms=processing_time_ms,
-    )
+    try:
+        await log_request(
+            db,
+            trace_id=trace_id,
+            sanitized_text=sanitized.sanitized_text,
+            raw_text=request.content,
+            classifier_scores=param_scores,
+            llm_response=llm_response_raw,
+            unified_risk_score=agg.unified_risk_score,
+            decision=agg.decision.value,
+            flags=flags_payload,
+            hitl_required=hitl_pending,
+            processing_time_ms=processing_time_ms,
+        )
+    except Exception as exc:
+        log_stage(
+            "audit_write_failed",
+            trace_id=trace_id,
+            error=str(exc),
+        )
 
     # ------------------------------------------------------------------
     # Build response

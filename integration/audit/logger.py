@@ -113,6 +113,33 @@ _SELECT_BY_TRACE = text(
     """
 )
 
+_CREATE_AUDIT_TABLE = text(
+    """
+    CREATE TABLE IF NOT EXISTS audit_log (
+        id UUID PRIMARY KEY,
+        trace_id UUID NOT NULL,
+        created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+        input_hash VARCHAR(64) NOT NULL,
+        raw_input_hash VARCHAR(64) NOT NULL,
+        classifier_scores JSONB NOT NULL,
+        llm_response JSONB NULL,
+        unified_risk_score DOUBLE PRECISION NOT NULL,
+        decision VARCHAR(20) NOT NULL,
+        flags JSONB NOT NULL,
+        hitl_required BOOLEAN NOT NULL DEFAULT FALSE,
+        processing_time_ms INTEGER NULL
+    )
+    """
+)
+
+_CREATE_AUDIT_TRACE_INDEX = text(
+    "CREATE INDEX IF NOT EXISTS ix_audit_log_trace_id ON audit_log (trace_id)"
+)
+
+_CREATE_AUDIT_CREATED_AT_INDEX = text(
+    "CREATE INDEX IF NOT EXISTS ix_audit_log_created_at ON audit_log (created_at)"
+)
+
 
 # ---------------------------------------------------------------------------
 # Public API — append-only
@@ -175,6 +202,13 @@ async def log_request(
     )
 
     return record_id
+
+
+async def ensure_audit_schema(db: AsyncConnection) -> None:
+    """Create audit tables and indexes if they do not exist."""
+    await db.execute(_CREATE_AUDIT_TABLE)
+    await db.execute(_CREATE_AUDIT_TRACE_INDEX)
+    await db.execute(_CREATE_AUDIT_CREATED_AT_INDEX)
 
 
 async def get_by_trace(db: AsyncConnection, trace_id: UUID) -> Optional[Dict[str, Any]]:

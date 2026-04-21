@@ -17,7 +17,9 @@ from sqlalchemy.ext.asyncio import AsyncConnection, AsyncEngine, create_async_en
 from integration.api.config import get_settings
 from integration.api.pipeline import run_pipeline
 from integration.api.schemas import AnalyzeRequest, AnalyzeResponse
+from integration.audit.logger import ensure_audit_schema
 from integration.hitl.queue import (
+    ensure_hitl_schema,
     escalate_stale,
     get_item,
     get_pending,
@@ -64,6 +66,16 @@ def create_app() -> FastAPI:
         _engine = create_async_engine(
             settings.database_url, pool_pre_ping=True)
         app.state.engine = _engine
+
+        try:
+            async with _engine.begin() as conn:
+                await ensure_audit_schema(conn)
+                await ensure_hitl_schema(conn)
+        except Exception as exc:
+            import logging
+            logging.getLogger(__name__).warning(
+                "Audit/HITL schema initialisation skipped: %s", exc
+            )
 
         # Initialise pgvector tables and optionally seed fraud patterns
         try:

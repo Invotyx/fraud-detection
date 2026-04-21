@@ -1,6 +1,24 @@
-from functools import lru_cache
+from __future__ import annotations
 
+import re
+from functools import lru_cache
+from urllib.parse import urlparse
+
+from pydantic import model_validator
 from pydantic_settings import BaseSettings, SettingsConfigDict
+
+# Private / loopback ranges that must not be reachable from production
+_PRIVATE_HOST_RE = re.compile(
+    r"^(?:localhost"
+    r"|127(?:\.\d+){3}"
+    r"|10(?:\.\d+){3}"
+    r"|192\.168(?:\.\d+){2}"
+    r"|172\.(?:1[6-9]|2\d|3[01])(?:\.\d+){2}"
+    r"|169\.254(?:\.\d+){2}"
+    r"|::1"
+    r"|fd[0-9a-fA-F]{2}:)",
+    re.I,
+)
 
 
 class Settings(BaseSettings):
@@ -59,6 +77,23 @@ class Settings(BaseSettings):
 
     # RAG — fraud pattern retrieval
     rag_enabled: bool = True
+
+    @model_validator(mode="after")
+    def _validate_llm_ssrf(self) -> "Settings":
+        """
+        Reject private/loopback LLM server URLs in non-development environments.
+        Prevents SSRF via a misconfigured or maliciously set llm_server_url.
+        """
+        if self.app_env == "development":
+            return self
+        host = urlparse(self.llm_server_url).hostname or ""
+        if _PRIVATE_HOST_RE.match(host):
+            raise ValueError(
+                f"llm_server_url '{self.llm_server_url}' resolves to a private or "
+                "loopback address, which is not permitted outside development. "
+                "Set APP_ENV=development to allow local endpoints."
+            )
+        return self
 
 
 @lru_cache

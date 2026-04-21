@@ -74,6 +74,9 @@ class AnalyzeResponse(BaseModel):
     result: FraudAnalysisResult
     processing_time_ms: int
     hitl_pending: bool = False
+    # INT-1: contextual security notification surfaced when an attack is mitigated
+    mitigation_notice: Optional[str] = None
+    blocked_attack_type: Optional[str] = None
 
 
 # ---------------------------------------------------------------------------

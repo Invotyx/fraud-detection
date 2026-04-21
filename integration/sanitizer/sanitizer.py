@@ -86,6 +86,13 @@ BASE64_RE = re.compile(r"(?:[A-Za-z0-9+/]{20,})={0,2}")
 # Hex-encoded byte sequences, e.g. \x69\x67
 HEX_ESCAPE_RE = re.compile(r"(?:\\x[0-9a-fA-F]{2}){4,}")
 
+# Path traversal patterns — literal, URL-encoded, double-encoded, and null-byte variants
+PATH_TRAVERSAL_RE = re.compile(
+    r"(?:\.\./|\.\.\\|%2e%2e%2f|%2e%2e/|\.\.%2f|%2e%2e\\|"
+    r"%252e%252e%252f|%252e%252e/|\.\.%00/?|\x00\.\./?)",
+    re.I,
+)
+
 
 # ---------------------------------------------------------------------------
 # Internal helpers
@@ -213,6 +220,18 @@ def _detect_encoding_anomalies(text: str) -> Tuple[str, List[str]]:
     return result, anomalies
 
 
+def _detect_path_traversal(text: str) -> List[str]:
+    """Flag path traversal sequences (../,  URL-encoded variants, null-byte injection)."""
+    matches = PATH_TRAVERSAL_RE.findall(text)
+    if not matches:
+        return []
+    # Deduplicate and cap report length
+    seen: dict = {}
+    for m in matches:
+        seen[m[:40]] = seen.get(m[:40], 0) + 1
+    return [f"path_traversal:{seq}(x{cnt})" for seq, cnt in list(seen.items())[:5]]
+
+
 # ---------------------------------------------------------------------------
 # Public interface
 # ---------------------------------------------------------------------------
@@ -247,6 +266,11 @@ def sanitize(raw_input: str) -> SanitizedResult:
 
     # Step 4: Encoding anomaly detection and normalization
     text, encoding_anomalies = _detect_encoding_anomalies(text)
+
+    # Step 5: Path traversal detection (checked on original text before decoding
+    #         so URL-encoded sequences are still intact)
+    traversal_flags = _detect_path_traversal(raw_input)
+    encoding_anomalies = encoding_anomalies + traversal_flags
 
     # Also extract URLs from cleaned plain text
     plain_urls = URL_RE.findall(text)

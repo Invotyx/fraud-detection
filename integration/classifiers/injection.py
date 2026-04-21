@@ -115,6 +115,35 @@ INJECTION_RULES: list[tuple[str, re.Pattern, float]] = [
             r"\btranslate\s+your\s+(system\s+prompt|instructions?)\b", re.I),
         0.85,
     ),
+    # ---- Command / OS injection (INT-5) ----
+    (
+        "command_injection_shell",
+        re.compile(
+            r"(?:;\s*rm\s+-[rRfF]{1,3}"
+            r"|[|&]\s*(?:curl|wget|nc|netcat|bash|sh|powershell)\b"
+            r"|\$\([^)]{1,300}\)"
+            r"|`[^`]{1,300}`"
+            r"|%0[aA]\s*(?:rm|curl|wget|bash|sh))",
+            re.I,
+        ),
+        0.85,
+    ),
+    (
+        "command_injection_code",
+        re.compile(
+            r"\b(?:os\.system\s*\("
+            r"|subprocess\.(?:run|call|Popen|check_output)\s*\("
+            r"|eval\s*\("
+            r"|exec\s*\("
+            r"|__import__\s*\("
+            r"|Invoke-Expression\b"
+            r"|Start-Process\b"
+            r"|powershell(?:\.exe)?\s+-(?:enc|command|c)\b"
+            r"|cmd(?:\.exe)?\s+/[ckC])\b",
+            re.I,
+        ),
+        0.88,
+    ),
 ]
 
 # Confidence threshold above which rule match triggers hard block

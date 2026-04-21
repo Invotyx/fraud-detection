@@ -34,6 +34,8 @@ from integration.risk_engine.aggregator import (
     aggregate,
 )
 from integration.sanitizer.sanitizer import sanitize
+from integration.classifiers.injection import classify_injection
+from integration.classifiers.session_risk import accumulate_session_injection
 from integration.vector_store.encoder import encode as embed_text
 from integration.vector_store.fraud_patterns import format_rag_context, retrieve_similar_patterns
 
@@ -98,7 +100,7 @@ async def _call_llm(
         import httpx
 
         user_content = (
-            f"{rag_context}\n---\nINPUT TO ANALYZE:\n{sanitized_text}"
+            f"<external_data>\n{rag_context}\n</external_data>\n---\nINPUT TO ANALYZE:\n{sanitized_text}"
             if rag_context
             else sanitized_text
         )
@@ -208,6 +210,51 @@ async def run_pipeline(
     """
     settings = get_settings()
     t_start = time.monotonic()
+
+    # ------------------------------------------------------------------
+    # Step 0: Guard model fast path — rule-based injection pre-filter
+    # If a definitive hard-block injection pattern is found in the raw
+    # input, skip the full pipeline and return an immediate block.
+    # ------------------------------------------------------------------
+    guard_result = classify_injection(request.content, use_ml=False)
+    if guard_result.rule_match and guard_result.score >= 0.90:
+        log_stage("guard_prefilter", trace_id=trace_id,
+                  score=guard_result.score, flags=guard_result.flags)
+        _block_score = guard_result.score
+        _guard_result = FraudAnalysisResult(
+            prompt_injection=ParameterScore(
+                score=_block_score, flag=True,
+                reason="Guard pre-filter: definitive injection pattern matched",
+            ),
+            unified_risk_score=_block_score,
+            decision=Decision.BLOCK,
+            explanation="Prompt injection blocked by pre-filter.",
+        )
+        _proc_ms = int((time.monotonic() - t_start) * 1000)
+        await log_request(
+            db,
+            trace_id=trace_id,
+            sanitized_text=request.content[:500],
+            raw_text=request.content,
+            classifier_scores={"prompt_injection": _block_score},
+            llm_response=None,
+            unified_risk_score=_block_score,
+            decision=Decision.BLOCK.value,
+            flags={"guard_prefilter": True, "flags": guard_result.flags},
+            hitl_required=False,
+            processing_time_ms=_proc_ms,
+        )
+        return AnalyzeResponse(
+            trace_id=trace_id,
+            result=_guard_result,
+            processing_time_ms=_proc_ms,
+            hitl_pending=False,
+            mitigation_notice=(
+                "A prompt injection attack was detected and blocked before reaching the model. "
+                f"Matched rule(s): {', '.join(guard_result.flags[:3])}."
+            ),
+            blocked_attack_type="prompt_injection",
+        )
 
     # ------------------------------------------------------------------
     # Step 1: Sanitize
@@ -450,6 +497,28 @@ async def run_pipeline(
         log_stage("hitl", trace_id=trace_id, enqueued=True)
 
     # ------------------------------------------------------------------
+    # Step 9b: Session-level injection accumulation (INT-7)
+    # Detects payload-splitting across multiple moderate-risk requests.
+    # ------------------------------------------------------------------
+    session_result = await accumulate_session_injection(
+        redis_client,
+        session_id=request.session_id or "",
+        injection_score=param_scores.get("prompt_injection", 0.0),
+    )
+    if session_result.escalated and agg.decision != Decision.BLOCK:
+        log_stage("session_risk", trace_id=trace_id,
+                  accumulated=session_result.accumulated_score,
+                  count=session_result.request_count)
+        agg = AggregationResult(
+            parameter_scores=agg.parameter_scores,
+            unified_score=max(agg.unified_score, 0.75),
+            decision=Decision.BLOCK,
+            hard_override=True,
+            override_reason="session_injection_accumulation",
+            weights_used=agg.weights_used,
+        )
+
+    # ------------------------------------------------------------------
     # Step 10: Write audit log
     # ------------------------------------------------------------------
     processing_time_ms = int((time.monotonic() - t_start) * 1000)
@@ -490,15 +559,39 @@ async def run_pipeline(
         data_exfiltration=_ps("data_exfiltration"),
         obfuscation_evasion=_ps("obfuscation_evasion"),
         unauthorized_action=_ps("unauthorized_action"),
+        authority_spoof=_ps("authority_spoof"),
         unified_risk_score=agg.unified_score,
         decision=agg.decision,
         explanation=str(llm_response_raw.get("explanation", "")
                         ) if llm_response_raw else "",
     )
 
+    # INT-1: Build mitigation notice when the request is blocked or flagged.
+    mitigation_notice: Optional[str] = None
+    blocked_attack_type: Optional[str] = None
+    if agg.decision != Decision.ALLOW:
+        _attack_scores = {
+            k: param_scores.get(k, 0.0)
+            for k in (
+                "prompt_injection", "data_exfiltration", "obfuscation_evasion",
+                "authority_spoof", "unauthorized_action", "fraud_intent",
+                "url_domain_risk", "context_deviation",
+            )
+        }
+        blocked_attack_type = max(_attack_scores, key=_attack_scores.get)
+        _action = "blocked" if agg.decision == Decision.BLOCK else "flagged for review"
+        _readable = blocked_attack_type.replace("_", " ")
+        mitigation_notice = (
+            f"Request {_action}. Dominant risk signal: {_readable} "
+            f"(score {_attack_scores[blocked_attack_type]:.2f}). "
+            "No action was taken on the original content."
+        )
+
     return AnalyzeResponse(
         trace_id=trace_id,
         result=result,
         processing_time_ms=processing_time_ms,
         hitl_pending=hitl_pending,
+        mitigation_notice=mitigation_notice,
+        blocked_attack_type=blocked_attack_type,
     )

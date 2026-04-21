@@ -426,7 +426,7 @@ async def run_pipeline(
 
     agg: AggregationResult = aggregate(param_scores, hard_flags)
     log_stage("aggregate", trace_id=trace_id,
-              unified_score=agg.unified_score, decision=agg.decision.value)
+              unified_risk_score=agg.unified_risk_score, decision=agg.decision.value)
 
     # ------------------------------------------------------------------
     # Step 7: Output validation
@@ -449,7 +449,7 @@ async def run_pipeline(
         if val_result.pii_detected or val_result.system_prompt_leaked:
             agg = AggregationResult(
                 parameter_scores=agg.parameter_scores,
-                unified_score=max(agg.unified_score, 0.75),
+                unified_risk_score=max(agg.unified_risk_score, 0.75),
                 decision=Decision.BLOCK,
                 hard_override=True,
                 override_reason="output_validation_fail",
@@ -472,7 +472,7 @@ async def run_pipeline(
                       blocked_tools=policy_violations)
             agg = AggregationResult(
                 parameter_scores=agg.parameter_scores,
-                unified_score=max(agg.unified_score, 0.85),
+                unified_risk_score=max(agg.unified_risk_score, 0.85),
                 decision=Decision.BLOCK,
                 hard_override=True,
                 override_reason="policy_violation",
@@ -487,7 +487,7 @@ async def run_pipeline(
         await hitl_enqueue(
             db,
             request_id=trace_id,
-            unified_risk_score=agg.unified_score,
+            unified_risk_score=agg.unified_risk_score,
             payload={
                 "content_hash": sanitized.sanitized_hash,
                 "scores": param_scores,
@@ -512,7 +512,7 @@ async def run_pipeline(
                   count=session_result.request_count)
         agg = AggregationResult(
             parameter_scores=agg.parameter_scores,
-            unified_score=max(agg.unified_score, 0.75),
+            unified_risk_score=max(agg.unified_risk_score, 0.75),
             decision=Decision.BLOCK,
             hard_override=True,
             override_reason="session_injection_accumulation",
@@ -538,7 +538,7 @@ async def run_pipeline(
         raw_text=request.content,
         classifier_scores=param_scores,
         llm_response=llm_response_raw,
-        unified_risk_score=agg.unified_score,
+        unified_risk_score=agg.unified_risk_score,
         decision=agg.decision.value,
         flags=flags_payload,
         hitl_required=hitl_pending,
@@ -561,7 +561,7 @@ async def run_pipeline(
         obfuscation_evasion=_ps("obfuscation_evasion"),
         unauthorized_action=_ps("unauthorized_action"),
         authority_spoof=_ps("authority_spoof"),
-        unified_risk_score=agg.unified_score,
+        unified_risk_score=agg.unified_risk_score,
         decision=agg.decision,
         explanation=str(llm_response_raw.get("explanation", "")
                         ) if llm_response_raw else "",

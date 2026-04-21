@@ -52,6 +52,7 @@ class AggregationResult:
     parameter_scores: Dict[str, float] = field(default_factory=dict)
     hard_override: bool = False
     override_reason: str = ""
+    weights_used: Dict[str, float] = field(default_factory=dict)
 
 
 # ---------------------------------------------------------------------------
@@ -139,22 +140,22 @@ def aggregate(
 
     # Normalize in case weights don't sum to exactly 1.0
     if total_weight > 0:
-        unified_score = weighted_sum / total_weight
+        unified_risk_score = weighted_sum / total_weight
     else:
-        unified_score = 0.0
+        unified_risk_score = 0.0
 
-    unified_score = round(min(1.0, max(0.0, unified_score)), 6)
+    unified_risk_score = round(min(1.0, max(0.0, unified_risk_score)), 6)
 
     # 4. Decision
-    if unified_score < allow_threshold:
+    if unified_risk_score < allow_threshold:
         decision = Decision.ALLOW
-    elif unified_score < review_threshold:
+    elif unified_risk_score < review_threshold:
         decision = Decision.REVIEW
     else:
         decision = Decision.BLOCK
 
     return AggregationResult(
-        unified_risk_score=unified_score,
+        unified_risk_score=unified_risk_score,
         decision=decision,
         parameter_scores=parameter_scores,
         hard_override=False,

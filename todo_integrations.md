@@ -214,7 +214,7 @@
       "obfuscation_evasion": 0.10,
       "unauthorized_action": 0.10,
   }
-  unified_score = sum(score[param] * weights[param] for param in weights)
+  unified_risk_score = sum(score[param] * weights[param] for param in weights)
   ```
 
   - Weights configurable via `configs/risk_weights.yaml`
@@ -224,9 +224,9 @@
   - URL blocklist match → immediate block (bypass scoring)
   - Prompt injection rule match → immediate block
 - [ ] **Decision thresholds:**
-  - `unified_score < 0.3` → `allow`
-  - `0.3 <= unified_score < 0.7` → `review` (route to HITL)
-  - `unified_score >= 0.7` → `block`
+  - `unified_risk_score < 0.3` → `allow`
+  - `0.3 <= unified_risk_score < 0.7` → `review` (route to HITL)
+  - `unified_risk_score >= 0.7` → `block`
 - [ ] Thresholds configurable via `configs/thresholds.yaml`
 - [ ] Unit tests: boundary conditions, hard override scenarios, weight normalization
 

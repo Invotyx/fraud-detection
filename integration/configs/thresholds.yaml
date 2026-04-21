@@ -1,5 +1,5 @@
 thresholds:
-  allow: 0.3 # unified_score < this  → allow
+  allow: 0.3 # unified_risk_score < this  → allow
   review: 0.7 # allow <= score < this  → review (HITL)
   # score >= review → block
 

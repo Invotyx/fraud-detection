@@ -168,4 +168,4 @@ authority_spoof:
   # Override the authority keyword list here if needed.
   # Defaults (in authority_spoof.py) cover banks, payment apps, and government
   # agencies across US/UK/AU/CA/PK/IN — extend here without code changes.
-  authority_keywords: []   # empty = use classifier defaults
+  authority_keywords: [] # empty = use classifier defaults

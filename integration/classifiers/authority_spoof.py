@@ -105,25 +105,30 @@ _SENSITIVE_REQUEST_PATTERNS: List[re.Pattern] = [
     # OTP / verification code
     re.compile(r"\b(?:share|send|provide|give|enter|reply with|tell us).*\b(?:otp|one.time|verification code|auth code)\b", re.I),
     re.compile(r"\botp\b.*\b(?:sms|text|message)\b", re.I),
-    re.compile(r"\b(?:do not|don'?t) share.*\botp\b", re.I),  # reverse-psychology phrasing
+    re.compile(r"\b(?:do not|don'?t) share.*\botp\b",
+               re.I),  # reverse-psychology phrasing
     # PIN / password
     re.compile(r"\b(?:share|send|provide|give|enter|reply with|confirm).*\b(?:pin|password|passcode|secret|passphrase)\b", re.I),
     # Account / card numbers
     re.compile(r"\b(?:share|send|provide|give|reply with|confirm).*\b(?:account number|card number|iban|routing number)\b", re.I),
     # CVV / expiry
-    re.compile(r"\b(?:cvv|cvc|security code|expiry|expiration).*(?:share|send|provide|enter|reply|confirm)\b", re.I),
-    re.compile(r"\b(?:share|send|provide|enter|reply with|confirm).*\b(?:cvv|cvc|security code|expiry|expiration)\b", re.I),
+    re.compile(
+        r"\b(?:cvv|cvc|security code|expiry|expiration).*(?:share|send|provide|enter|reply|confirm)\b", re.I),
+    re.compile(
+        r"\b(?:share|send|provide|enter|reply with|confirm).*\b(?:cvv|cvc|security code|expiry|expiration)\b", re.I),
     # National ID / SSN
     re.compile(r"\b(?:share|send|provide|give|reply with|confirm).*\b(?:cnic|nic|ssn|social security|national id|passport number|date of birth|dob)\b", re.I),
     # Generic "personal / sensitive / financial details"
     re.compile(r"\b(?:share|send|provide|give|reply with)\b.*\b(?:personal details|sensitive information|financial details|banking details|bank details)\b", re.I),
     # Asking to call a number to give credentials
-    re.compile(r"\bcall\b.*\b(?:confirm|verify|provide|share|give).*\b(?:account|otp|pin|password|id)\b", re.I),
+    re.compile(
+        r"\bcall\b.*\b(?:confirm|verify|provide|share|give).*\b(?:account|otp|pin|password|id)\b", re.I),
 ]
 
 # ---------------------------------------------------------------------------
 # Result dataclass
 # ---------------------------------------------------------------------------
+
 
 @dataclass
 class AuthoritySpoofResult:
@@ -179,14 +184,16 @@ def detect_authority_spoof(text: str) -> AuthoritySpoofResult:
     # --- Rule 1: Authority + Link + CTA ---
     authority_kw = _contains_authority_keyword(text)
     if authority_kw and _has_url(text) and _has_cta(text):
-        rule_score = float(_CFG.get("score_weights", {}).get("authority_link", 0.72))
+        rule_score = float(_CFG.get("score_weights", {}
+                                    ).get("authority_link", 0.72))
         score = max(score, rule_score)
         flags.append(f"authority_link:{authority_kw}")
 
     # --- Rule 2: Sensitive Information Request ---
     sensitive_matched = _sensitive_terms_matched(text)
     if sensitive_matched:
-        rule_score = float(_CFG.get("score_weights", {}).get("sensitive_info_request", 0.80))
+        rule_score = float(_CFG.get("score_weights", {}).get(
+            "sensitive_info_request", 0.80))
         score = max(score, rule_score)
         flags.append("sensitive_info_request")
 

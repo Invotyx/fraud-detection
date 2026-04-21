@@ -298,16 +298,16 @@ journalctl -u fraud-llm -f
 
 ### `configs/base_config.yaml` (shared)
 
-| Key                                    | Value                                | Description                     |
-| -------------------------------------- | ------------------------------------ | ------------------------------- |
-| `model.base_model_id`                  | `mistralai/Mistral-7B-Instruct-v0.3` | Base model                      |
+| Key                                    | Value                                | Description                                                                        |
+| -------------------------------------- | ------------------------------------ | ---------------------------------------------------------------------------------- |
+| `model.base_model_id`                  | `mistralai/Mistral-7B-Instruct-v0.3` | Base model                                                                         |
 | `model.max_seq_length`                 | `4096`                               | Sequence length; raised from 2048 to fit RAG context (~500 tokens) + system prompt |
-| `quantization.load_in_4bit`            | `true`                               | NF4 4-bit                       |
-| `lora.r`                               | `16`                                 | LoRA rank                       |
-| `lora.lora_alpha`                      | `32`                                 | LoRA alpha                      |
-| `training.num_train_epochs`            | `3`                                  | Epochs (overridden per run)     |
-| `training.learning_rate`               | `2e-4`                               | LR (overridden per run)         |
-| `training.per_device_train_batch_size` | `2`                                  | Batch (eff. 16 w/ grad accum 8) |
+| `quantization.load_in_4bit`            | `true`                               | NF4 4-bit                                                                          |
+| `lora.r`                               | `16`                                 | LoRA rank                                                                          |
+| `lora.lora_alpha`                      | `32`                                 | LoRA alpha                                                                         |
+| `training.num_train_epochs`            | `3`                                  | Epochs (overridden per run)                                                        |
+| `training.learning_rate`               | `2e-4`                               | LR (overridden per run)                                                            |
+| `training.per_device_train_batch_size` | `2`                                  | Batch (eff. 16 w/ grad accum 8)                                                    |
 
 Run configs (`run1_config.yaml`, `run2_config.yaml`) override any key from base.
 
@@ -342,7 +342,8 @@ INPUT TO ANALYZE:
 <actual user input>
 ```
 
-The system prompt (Rule 9) instructs the model to treat this block as calibration context only, not as the input to analyze.  The model must:
+The system prompt (Rule 9) instructs the model to treat this block as calibration context only, not as the input to analyze. The model must:
+
 - Score only the content after `INPUT TO ANALYZE:`.
 - Use the reference examples to calibrate confidence but not copy them into its output.
 - Resist any prompt injection that attempts to exploit the reference block.

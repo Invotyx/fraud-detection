@@ -62,13 +62,13 @@ integration/
 
 ## Prerequisites
 
-| Tool           | Version         |
-| -------------- | --------------- |
-| Python         | 3.11+           |
-| Docker         | 24+             |
-| Docker Compose | v2+             |
+| Tool           | Version                  |
+| -------------- | ------------------------ |
+| Python         | 3.11+                    |
+| Docker         | 24+                      |
+| Docker Compose | v2+                      |
 | PostgreSQL     | 16+pgvector (via Docker) |
-| Redis          | 7 (via Docker)  |
+| Redis          | 7 (via Docker)           |
 
 ---
 
@@ -84,20 +84,20 @@ cp .env.example .env
 
 **Required env vars:**
 
-| Variable                | Default                                                          | Description                    |
-| ----------------------- | ---------------------------------------------------------------- | ------------------------------ |
-| `DATABASE_URL`          | `postgresql+asyncpg://fraud:fraud@postgres:5432/fraud_detection` | Async Postgres DSN             |
-| `REDIS_URL`             | `redis://redis:6379/0`                                           | Redis DSN                      |
-| `LLM_SERVER_URL`        | `http://localhost:8001`                                          | LLM inference server           |
-| `LLM_ENDPOINT`          | `/v1/chat/completions`                                           | LLM inference endpoint path    |
-| `LLM_MODEL_NAME`        | `fraud-detector-v1`                                              | Model name in request body     |
-| `LLM_SYSTEM_PROMPT_PATH`| _(empty)_                                                        | Path to system prompt; empty = bundled default |
-| `RAG_ENABLED`           | `true`                                                           | Enable fraud pattern RAG retrieval |
-| `API_KEYS`              | _(none)_                                                         | Comma-separated valid API keys |
-| `JWT_SECRET_KEY`        | `change-me-in-production`                                        | **Must change in prod**        |
-| `RISK_ALLOW_THRESHOLD`  | `0.3`                                                            | Score below which → allow      |
-| `RISK_REVIEW_THRESHOLD` | `0.7`                                                            | Score above which → block      |
-| `RATE_LIMIT_PER_MINUTE` | `100`                                                            | Per API-key request cap        |
+| Variable                 | Default                                                          | Description                                    |
+| ------------------------ | ---------------------------------------------------------------- | ---------------------------------------------- |
+| `DATABASE_URL`           | `postgresql+asyncpg://fraud:fraud@postgres:5432/fraud_detection` | Async Postgres DSN                             |
+| `REDIS_URL`              | `redis://redis:6379/0`                                           | Redis DSN                                      |
+| `LLM_SERVER_URL`         | `http://localhost:8001`                                          | LLM inference server                           |
+| `LLM_ENDPOINT`           | `/v1/chat/completions`                                           | LLM inference endpoint path                    |
+| `LLM_MODEL_NAME`         | `fraud-detector-v1`                                              | Model name in request body                     |
+| `LLM_SYSTEM_PROMPT_PATH` | _(empty)_                                                        | Path to system prompt; empty = bundled default |
+| `RAG_ENABLED`            | `true`                                                           | Enable fraud pattern RAG retrieval             |
+| `API_KEYS`               | _(none)_                                                         | Comma-separated valid API keys                 |
+| `JWT_SECRET_KEY`         | `change-me-in-production`                                        | **Must change in prod**                        |
+| `RISK_ALLOW_THRESHOLD`   | `0.3`                                                            | Score below which → allow                      |
+| `RISK_REVIEW_THRESHOLD`  | `0.7`                                                            | Score above which → block                      |
+| `RATE_LIMIT_PER_MINUTE`  | `100`                                                            | Per API-key request cap                        |
 
 ### 2 — Start all services
 
@@ -200,10 +200,10 @@ Submit a human decision for a queued item.
 
 The integration layer uses **pgvector** (bundled in the `pgvector/pgvector:pg16` Docker image) for two purposes:
 
-| Purpose | Table | Description |
-| ------- | ----- | ----------- |
-| Session embedding store | `session_embeddings` | Stores per-turn text embeddings for in-session context deviation detection. Rows expire via `expires_at` column (TTL configurable in `classifiers.yaml`). |
-| Fraud pattern knowledge base | `fraud_patterns` | 27 seed examples of known fraud patterns, embedded at startup. Used for RAG retrieval at inference time. |
+| Purpose                      | Table                | Description                                                                                                                                               |
+| ---------------------------- | -------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| Session embedding store      | `session_embeddings` | Stores per-turn text embeddings for in-session context deviation detection. Rows expire via `expires_at` column (TTL configurable in `classifiers.yaml`). |
+| Fraud pattern knowledge base | `fraud_patterns`     | 27 seed examples of known fraud patterns, embedded at startup. Used for RAG retrieval at inference time.                                                  |
 
 Both tables carry `vector(768)` columns with **IVFFlat cosine** indexes (created by migration `0002`).
 

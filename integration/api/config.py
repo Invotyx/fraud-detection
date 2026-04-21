@@ -32,8 +32,8 @@ class Settings(BaseSettings):
     api_version: str = "1.0.0"
 
     # Database / cache
-    database_url: str = "postgresql+asyncpg://fraud:fraud@localhost:5432/fraud_detection"
-    redis_url: str = "redis://localhost:6379/0"
+    database_url: str = "postgresql+asyncpg://fraud:fraud@postgres:5432/fraud_detection"
+    redis_url: str = "redis://redis:6379/0"
 
     # LLM inference server
     llm_server_url: str = "http://localhost:8001"

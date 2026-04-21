@@ -47,10 +47,10 @@ training:
   report_to: "wandb" # set to "none" to disable W&B
 
 data:
-  train_file: "data/train.jsonl"
-  val_file: "data/val.jsonl"
-  test_file: "data/test.jsonl"
-  prompt_template: "prompts/system_prompt.txt"
+  train_file: "llm/data/train.jsonl"
+  val_file: "llm/data/val.jsonl"
+  test_file: "llm/data/test.jsonl"
+  prompt_template: "llm/prompts/system_prompt.txt"
 
 experiment:
   wandb_project: "fraud-detection-llm"

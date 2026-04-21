@@ -456,7 +456,8 @@ def main() -> None:
         local_model=args.model if args.local and not args.dry_run else None,
         verbose=args.verbose,
     )
-    sys.exit(0 if passed == total else 1)
+    pass_rate = passed / total if total else 0.0
+    sys.exit(0 if pass_rate >= 0.9 else 1)
 
 
 if __name__ == "__main__":

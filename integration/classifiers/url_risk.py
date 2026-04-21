@@ -15,7 +15,9 @@ from __future__ import annotations
 
 import ipaddress
 import math
+import os
 import re
+import yaml
 from dataclasses import dataclass, field
 from datetime import datetime, timezone
 from typing import List, Optional, Tuple
@@ -38,44 +40,55 @@ class URLRiskResult:
 
 
 # ---------------------------------------------------------------------------
-# Constants
+# Config loader
 # ---------------------------------------------------------------------------
 
+def _load_url_risk_cfg() -> dict:
+    cfg_path = os.path.join(
+        os.path.dirname(__file__), "..", "configs", "classifiers.yaml"
+    )
+    with open(cfg_path) as fh:
+        return yaml.safe_load(fh).get("url_risk", {})
+
+
+_CFG = _load_url_risk_cfg()
+
 # Known URL shortener domains
-URL_SHORTENERS: frozenset[str] = frozenset({
+URL_SHORTENERS: frozenset[str] = frozenset(_CFG.get("url_shorteners", [
     "bit.ly", "tinyurl.com", "goo.gl", "ow.ly", "t.co",
     "buff.ly", "short.link", "rb.gy", "cutt.ly", "tiny.cc",
     "is.gd", "v.gd", "bl.ink", "shorturl.at",
-})
+]))
 
 # Top brand domains to check lookalikes against
-BRAND_DOMAINS: frozenset[str] = frozenset({
+BRAND_DOMAINS: frozenset[str] = frozenset(_CFG.get("brand_domains", [
     "paypal.com", "apple.com", "google.com", "microsoft.com",
     "amazon.com", "facebook.com", "twitter.com", "instagram.com",
     "netflix.com", "linkedin.com", "dropbox.com", "github.com",
     "bankofamerica.com", "chase.com", "wellsfargo.com",
     "americanexpress.com", "visa.com", "mastercard.com",
     "yahoo.com", "gmail.com", "outlook.com", "icloud.com",
-})
+]))
 
 # Shannon entropy threshold — above this → suspicious (DGA-like)
-ENTROPY_THRESHOLD: float = 3.5
+ENTROPY_THRESHOLD: float = float(_CFG.get("entropy_threshold", 3.5))
 
 # Domain age threshold in days — younger than this → elevated risk
-DOMAIN_AGE_THRESHOLD_DAYS: int = 30
+DOMAIN_AGE_THRESHOLD_DAYS: int = int(_CFG.get("domain_age_threshold_days", 30))
 
 # Lookalike edit distance threshold (Levenshtein)
-LOOKALIKE_DISTANCE_THRESHOLD: int = 2
+LOOKALIKE_DISTANCE_THRESHOLD: int = int(
+    _CFG.get("lookalike_distance_threshold", 2))
 
 # Risk score weights for each signal
-SCORE_WEIGHTS = {
+SCORE_WEIGHTS: dict = _CFG.get("score_weights", {
     "blocklisted": 1.0,
     "direct_ip": 0.85,
     "young_domain": 0.60,
     "high_entropy": 0.55,
     "lookalike": 0.70,
     "shortener": 0.40,
-}
+})
 
 
 # ---------------------------------------------------------------------------

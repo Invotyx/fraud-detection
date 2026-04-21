@@ -1,0 +1,103 @@
+# =============================================================================
+# Classifier-specific configuration
+# Tuning knobs for ML/rule-based classifiers.
+# Infrastructure settings (URLs, ports, credentials) belong in .env instead.
+# =============================================================================
+
+# ---------------------------------------------------------------------------
+# Context Deviation Classifier
+# ---------------------------------------------------------------------------
+context_deviation:
+  embedding_model_id: "all-MiniLM-L6-v2"
+  session_ttl_seconds: 3600 # Redis TTL for session scope embeddings
+  turn_history_max: 20 # max turns kept in session history
+  scope_key_prefix: "ctx:scope:"
+  history_key_prefix: "ctx:history:"
+
+# ---------------------------------------------------------------------------
+# Ensemble Models
+# ---------------------------------------------------------------------------
+ensemble:
+  models:
+    rule_url_risk:
+      weight: 0.30
+      timeout_seconds: 1.0
+    keyword_fraud:
+      weight: 0.30
+      timeout_seconds: 1.0
+    xgboost_transaction:
+      weight: 0.40
+      timeout_seconds: 2.0
+
+  # Keyword fraud scorer
+  fraud_keywords:
+    - "urgent"
+    - "immediate action"
+    - "verify your account"
+    - "click here now"
+    - "limited time"
+    - "you have won"
+    - "suspended"
+    - "confirm your identity"
+    - "unauthorized access"
+    - "prince"
+    - "inheritance"
+    - "wire transfer"
+    - "gift card"
+  keyword_score_increment: 0.12 # score added per matching keyword
+
+# ---------------------------------------------------------------------------
+# URL / Domain Risk Classifier
+# ---------------------------------------------------------------------------
+url_risk:
+  entropy_threshold: 3.5 # Shannon entropy above this → DGA-like
+  domain_age_threshold_days: 30 # domains younger than this → elevated risk
+  lookalike_distance_threshold: 2 # Levenshtein distance for brand lookalike
+
+  score_weights:
+    blocklisted: 1.00
+    direct_ip: 0.85
+    young_domain: 0.60
+    high_entropy: 0.55
+    lookalike: 0.70
+    shortener: 0.40
+
+  url_shorteners:
+    - "bit.ly"
+    - "tinyurl.com"
+    - "goo.gl"
+    - "ow.ly"
+    - "t.co"
+    - "buff.ly"
+    - "short.link"
+    - "rb.gy"
+    - "cutt.ly"
+    - "tiny.cc"
+    - "is.gd"
+    - "v.gd"
+    - "bl.ink"
+    - "shorturl.at"
+
+  brand_domains:
+    - "paypal.com"
+    - "apple.com"
+    - "google.com"
+    - "microsoft.com"
+    - "amazon.com"
+    - "facebook.com"
+    - "twitter.com"
+    - "instagram.com"
+    - "netflix.com"
+    - "linkedin.com"
+    - "dropbox.com"
+    - "github.com"
+    - "bankofamerica.com"
+    - "chase.com"
+    - "wellsfargo.com"
+    - "americanexpress.com"
+    - "visa.com"
+    - "mastercard.com"
+    - "yahoo.com"
+    - "gmail.com"
+    - "outlook.com"
+    - "icloud.com"

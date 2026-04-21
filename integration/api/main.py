@@ -32,16 +32,21 @@ def create_app() -> FastAPI:
     settings = get_settings()
 
     app = FastAPI(
-        title="Fraud Detection Integration API",
-        version="1.0.0",
+        title=settings.api_title,
+        version=settings.api_version,
         docs_url="/docs" if settings.app_env != "production" else None,
         redoc_url=None,
     )
 
     # CORS — restrict in production
+    origins = (
+        [o.strip() for o in settings.cors_allowed_origins.split(",")]
+        if settings.app_env != "production"
+        else []
+    )
     app.add_middleware(
         CORSMiddleware,
-        allow_origins=["*"] if settings.app_env != "production" else [],
+        allow_origins=origins,
         allow_methods=["GET", "POST"],
         allow_headers=["*"],
     )
@@ -103,7 +108,7 @@ def create_app() -> FastAPI:
         api_key: str = Depends(verify_api_key),
     ) -> None:
         now = time.monotonic()
-        window = 60.0  # 1 minute sliding window
+        window = settings.rate_limit_window_seconds
         bucket = _rate_buckets.setdefault(api_key, [])
         # Evict old timestamps
         _rate_buckets[api_key] = [t for t in bucket if now - t < window]
@@ -160,7 +165,7 @@ def create_app() -> FastAPI:
         dependencies=[Depends(verify_hitl_api_key)],
     )
     async def hitl_list(
-        limit: int = 20,
+        limit: int = settings.hitl_queue_default_limit,
         db: AsyncConnection = Depends(get_db),
     ) -> JSONResponse:
         """List pending HITL review items (auth required)."""

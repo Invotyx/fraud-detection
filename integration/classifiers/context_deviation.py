@@ -16,8 +16,30 @@ import re as _re
 
 import json
 import hashlib
+import os
+import yaml
 from dataclasses import dataclass, field
 from typing import List, Optional, Tuple
+
+# ---------------------------------------------------------------------------
+# Classifier config loader
+# ---------------------------------------------------------------------------
+
+
+def _load_classifier_cfg() -> dict:
+    cfg_path = os.path.join(
+        os.path.dirname(__file__), "..", "configs", "classifiers.yaml"
+    )
+    with open(cfg_path) as fh:
+        return yaml.safe_load(fh).get("context_deviation", {})
+
+
+_CFG = _load_classifier_cfg()
+_EMBEDDING_MODEL_ID: str = _CFG.get("embedding_model_id", "all-MiniLM-L6-v2")
+_SESSION_TTL_SECONDS: int = int(_CFG.get("session_ttl_seconds", 3600))
+_TURN_HISTORY_MAX: int = int(_CFG.get("turn_history_max", 20))
+_SCOPE_KEY_PREFIX: str = _CFG.get("scope_key_prefix", "ctx:scope:")
+_HISTORY_KEY_PREFIX: str = _CFG.get("history_key_prefix", "ctx:history:")
 
 # ---------------------------------------------------------------------------
 # Result dataclass
@@ -47,7 +69,7 @@ def _get_encoder():
         return _encoder
     try:
         from sentence_transformers import SentenceTransformer  # type: ignore
-        _encoder = SentenceTransformer("all-MiniLM-L6-v2")
+        _encoder = SentenceTransformer(_EMBEDDING_MODEL_ID)
         return _encoder
     except Exception:
         return None
@@ -88,14 +110,14 @@ def _get_redis():
 
 
 def _scope_key(session_id: str) -> str:
-    return f"ctx:scope:{session_id}"
+    return f"{_SCOPE_KEY_PREFIX}{session_id}"
 
 
 def _history_key(session_id: str) -> str:
-    return f"ctx:history:{session_id}"
+    return f"{_HISTORY_KEY_PREFIX}{session_id}"
 
 
-def store_session_scope(session_id: str, task_scope: str, ttl_seconds: int = 3600) -> bool:
+def store_session_scope(session_id: str, task_scope: str, ttl_seconds: int = _SESSION_TTL_SECONDS) -> bool:
     """
     Store the declared task scope and its embedding for a session.
     Returns True on success, False if Redis unavailable (degrades gracefully).
@@ -109,9 +131,9 @@ def store_session_scope(session_id: str, task_scope: str, ttl_seconds: int = 360
     return False
 
 
-def append_turn(session_id: str, text: str, ttl_seconds: int = 3600) -> bool:
+def append_turn(session_id: str, text: str, ttl_seconds: int = _SESSION_TTL_SECONDS) -> bool:
     """
-    Append a turn embedding to the session history (list, max 20 turns).
+    Append a turn embedding to the session history (list, max _TURN_HISTORY_MAX turns).
     """
     r = _get_redis()
     if r is None:
@@ -121,7 +143,7 @@ def append_turn(session_id: str, text: str, ttl_seconds: int = 3600) -> bool:
         return False
     key = _history_key(session_id)
     r.lpush(key, json.dumps(embedding))
-    r.ltrim(key, 0, 19)   # keep last 20 turns
+    r.ltrim(key, 0, _TURN_HISTORY_MAX - 1)
     r.expire(key, ttl_seconds)
     return True
 

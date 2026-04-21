@@ -1,16 +1,23 @@
 version: "3.9"
 
+# Copy .env.example → .env and fill in real values before running.
+# docker-compose automatically loads .env from the same directory.
+
 services:
   api:
     build:
       context: .
       dockerfile: Dockerfile
     ports:
-      - "8000:8000"
+      - "${API_PORT:-8000}:8000"
     environment:
-      - DATABASE_URL=postgresql+asyncpg://fraud:fraud@postgres:5432/fraud_detection
-      - REDIS_URL=redis://redis:6379/0
-      - LOG_LEVEL=INFO
+      - DATABASE_URL=${DATABASE_URL:-postgresql+asyncpg://fraud:fraud@postgres:5432/fraud_detection}
+      - REDIS_URL=${REDIS_URL:-redis://redis:6379/0}
+      - LOG_LEVEL=${LOG_LEVEL:-INFO}
+      - APP_ENV=${APP_ENV:-development}
+      - LLM_SERVER_URL=${LLM_SERVER_URL:-http://localhost:8001}
+      - JWT_SECRET_KEY=${JWT_SECRET_KEY:-change-me-in-production}
+      - RATE_LIMIT_PER_MINUTE=${RATE_LIMIT_PER_MINUTE:-100}
     depends_on:
       postgres:
         condition: service_healthy
@@ -21,32 +28,36 @@ services:
     restart: unless-stopped
 
   postgres:
-    image: postgres:16-alpine
+    image: ${POSTGRES_IMAGE:-postgres:16-alpine}
     environment:
-      POSTGRES_USER: fraud
-      POSTGRES_PASSWORD: fraud
-      POSTGRES_DB: fraud_detection
+      POSTGRES_USER: ${POSTGRES_USER:-fraud}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-fraud}
+      POSTGRES_DB: ${POSTGRES_DB:-fraud_detection}
     ports:
-      - "5432:5432"
+      - "${POSTGRES_PORT:-5432}:5432"
     volumes:
       - postgres_data:/var/lib/postgresql/data
     healthcheck:
-      test: ["CMD-SHELL", "pg_isready -U fraud -d fraud_detection"]
-      interval: 5s
+      test:
+        [
+          "CMD-SHELL",
+          "pg_isready -U ${POSTGRES_USER:-fraud} -d ${POSTGRES_DB:-fraud_detection}",
+        ]
+      interval: ${HEALTH_CHECK_INTERVAL:-5s}
       timeout: 5s
-      retries: 5
+      retries: ${HEALTH_CHECK_RETRIES:-5}
 
   redis:
-    image: redis:7-alpine
+    image: ${REDIS_IMAGE:-redis:7-alpine}
     ports:
-      - "6379:6379"
+      - "${REDIS_PORT:-6379}:6379"
     volumes:
       - redis_data:/data
     healthcheck:
       test: ["CMD", "redis-cli", "ping"]
-      interval: 5s
+      interval: ${HEALTH_CHECK_INTERVAL:-5s}
       timeout: 3s
-      retries: 5
+      retries: ${HEALTH_CHECK_RETRIES:-5}
 
 volumes:
   postgres_data:

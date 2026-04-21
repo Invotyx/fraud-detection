@@ -108,8 +108,6 @@ async def _run_ml_classifiers(
 # Pipeline core
 # ---------------------------------------------------------------------------
 
-PIPELINE_TIMEOUT_SECONDS = 5.0
-
 
 async def run_pipeline(
     request: AnalyzeRequest,
@@ -184,7 +182,8 @@ async def run_pipeline(
     )
 
     try:
-        remaining = PIPELINE_TIMEOUT_SECONDS - (time.monotonic() - t_start)
+        remaining = settings.pipeline_timeout_seconds - \
+            (time.monotonic() - t_start)
         llm_response_raw, ml_scores, ensemble_result = await asyncio.wait_for(
             asyncio.gather(llm_task, ml_task, ensemble_task),
             timeout=max(remaining, 0.5),
@@ -207,15 +206,15 @@ async def run_pipeline(
     # (Rule-based scores already embedded in encoding_anomalies; we use
     #  presence of anomalies as a proxy score here)
     # ------------------------------------------------------------------
-    injection_score = 0.6 if sanitized.encoding_anomalies else 0.0
+    injection_score = settings.injection_encoding_anomaly_score if sanitized.encoding_anomalies else 0.0
     url_risk_score = 0.0
     if sanitized.detected_urls:
         # Lightweight heuristic: presence of suspicious redirect / shortener
         suspicious_prefixes = (
             "http://bit.ly", "http://t.co", "http://tinyurl")
-        url_risk_score = 0.5 if any(
+        url_risk_score = settings.url_risk_suspicious_score if any(
             u.startswith(suspicious_prefixes) for u in sanitized.detected_urls
-        ) else 0.05
+        ) else settings.url_risk_default_score
 
     # ------------------------------------------------------------------
     # Step 6: Build parameter scores dict for aggregation
@@ -235,10 +234,12 @@ async def run_pipeline(
                       "obfuscation_evasion", "unauthorized_action"):
             block = llm_response_raw.get(param, {})
             if isinstance(block, dict) and "score" in block:
-                # Blend LLM score (60%) with rule-based score (40%)
+                # Blend LLM score with rule-based score (weights from settings)
                 rule_score = param_scores.get(param, 0.0)
-                param_scores[param] = 0.6 * \
-                    float(block["score"]) + 0.4 * rule_score
+                param_scores[param] = (
+                    settings.llm_score_weight * float(block["score"])
+                    + settings.rule_score_weight * rule_score
+                )
         param_scores.setdefault("fraud_intent", float(
             (llm_response_raw.get("fraud_intent") or {}).get("score", 0.0)
         ))

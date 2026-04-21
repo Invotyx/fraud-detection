@@ -17,9 +17,30 @@ Usage:
 from __future__ import annotations
 
 import asyncio
+import os
 import time
+import yaml
 from dataclasses import dataclass, field
 from typing import Any, Callable, Dict, List, Optional
+
+# ---------------------------------------------------------------------------
+# Classifier config loader
+# ---------------------------------------------------------------------------
+
+
+def _load_classifier_cfg() -> dict:
+    cfg_path = os.path.join(
+        os.path.dirname(__file__), "..", "configs", "classifiers.yaml"
+    )
+    with open(cfg_path) as fh:
+        return yaml.safe_load(fh).get("ensemble", {})
+
+
+_CFG = _load_classifier_cfg()
+_FRAUD_KEYWORDS: List[str] = _CFG.get("fraud_keywords", [])
+_KEYWORD_SCORE_INCREMENT: float = float(
+    _CFG.get("keyword_score_increment", 0.12))
+_MODEL_CFG: Dict[str, dict] = _CFG.get("models", {})
 
 # ---------------------------------------------------------------------------
 # Data classes
@@ -80,14 +101,9 @@ def _keyword_fraud_scorer(features: Dict[str, Any]) -> float:
     if not content:
         return 0.0
 
-    fraud_keywords = [
-        "urgent", "immediate action", "verify your account",
-        "click here now", "limited time", "you have won",
-        "suspended", "confirm your identity", "unauthorized access",
-        "prince", "inheritance", "wire transfer", "gift card",
-    ]
+    fraud_keywords = _FRAUD_KEYWORDS
     hits = sum(1 for kw in fraud_keywords if kw.lower() in content.lower())
-    return min(1.0, hits * 0.12)
+    return min(1.0, hits * _KEYWORD_SCORE_INCREMENT)
 
 
 # ---------------------------------------------------------------------------
@@ -97,21 +113,24 @@ def _keyword_fraud_scorer(features: Dict[str, Any]) -> float:
 DEFAULT_MODELS: List[EnsembleModel] = [
     EnsembleModel(
         name="rule_url_risk",
-        weight=0.30,
+        weight=_MODEL_CFG.get("rule_url_risk", {}).get("weight", 0.30),
         scorer=_rule_based_url_scorer,
-        timeout_seconds=1.0,
+        timeout_seconds=_MODEL_CFG.get(
+            "rule_url_risk", {}).get("timeout_seconds", 1.0),
     ),
     EnsembleModel(
         name="keyword_fraud",
-        weight=0.30,
+        weight=_MODEL_CFG.get("keyword_fraud", {}).get("weight", 0.30),
         scorer=_keyword_fraud_scorer,
-        timeout_seconds=1.0,
+        timeout_seconds=_MODEL_CFG.get(
+            "keyword_fraud", {}).get("timeout_seconds", 1.0),
     ),
     EnsembleModel(
         name="xgboost_transaction",
-        weight=0.40,
+        weight=_MODEL_CFG.get("xgboost_transaction", {}).get("weight", 0.40),
         scorer=_placeholder_scorer,      # placeholder until trained
-        timeout_seconds=2.0,
+        timeout_seconds=_MODEL_CFG.get(
+            "xgboost_transaction", {}).get("timeout_seconds", 2.0),
     ),
 ]
 

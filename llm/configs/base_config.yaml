@@ -4,7 +4,7 @@
 model:
   base_model_id: "mistralai/Mistral-7B-Instruct-v0.3"
   fallback_model_id: "microsoft/Phi-3-mini-4k-instruct"
-  max_seq_length: 2048
+  max_seq_length: 4096  # increased from 2048 to accommodate RAG context prefix (~500 tokens)
   trust_remote_code: false
 
 quantization:

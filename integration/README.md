@@ -16,16 +16,22 @@ integration/
 ├── audit/
 │   └── logger.py          # Append-only audit trail (SHA-256, no plaintext)
 ├── classifiers/
-│   ├── context_deviation.py
-│   ├── ensemble.py        # Blends all classifier outputs
+│   ├── context_deviation.py  # pgvector-backed session/turn deviation detection
+│   ├── ensemble.py           # Blends all classifier outputs
 │   ├── exfiltration.py
 │   ├── injection.py
 │   ├── obfuscation.py
 │   └── url_risk.py
 ├── configs/
-│   └── thresholds.yaml    # Risk score thresholds and parameter weights
+│   ├── classifiers.yaml      # Embedding model, RAG config, per-classifier thresholds
+│   ├── fraud_patterns.yaml   # Seed knowledge base (27 labelled fraud patterns)
+│   ├── risk_weights.yaml     # Per-parameter risk weights
+│   ├── system_prompt.txt     # Bundled LLM system prompt (kept in sync with llm/prompts/)
+│   └── thresholds.yaml       # Decision thresholds
 ├── hitl/
-│   ├── migrations/        # Alembic migration: 0001_create_hitl_and_audit.py
+│   ├── migrations/
+│   │   ├── 0001_create_hitl_and_audit.py
+│   │   └── 0002_add_pgvector_tables.py  # vector extension + session/pattern tables
 │   └── queue.py           # PostgreSQL-backed HITL queue
 ├── output_validator/
 │   └── validator.py       # PII and system-prompt-leak detector
@@ -35,6 +41,10 @@ integration/
 │   └── aggregator.py      # Weighted risk score aggregation
 ├── sanitizer/
 │   └── sanitizer.py       # Input normalization and length enforcement
+├── vector_store/
+│   ├── encoder.py         # Shared SentenceTransformer singleton (lazy-loaded)
+│   ├── fraud_patterns.py  # Knowledge base seeding + RAG retrieval + context formatter
+│   └── store.py           # pgvector CRUD: session embeddings, ANN search, drift detection
 ├── scripts/
 │   └── load_test.py       # Async SLA load tester
 ├── tests/
@@ -57,7 +67,7 @@ integration/
 | Python         | 3.11+           |
 | Docker         | 24+             |
 | Docker Compose | v2+             |
-| PostgreSQL     | 16 (via Docker) |
+| PostgreSQL     | 16+pgvector (via Docker) |
 | Redis          | 7 (via Docker)  |
 
 ---
@@ -79,6 +89,10 @@ cp .env.example .env
 | `DATABASE_URL`          | `postgresql+asyncpg://fraud:fraud@postgres:5432/fraud_detection` | Async Postgres DSN             |
 | `REDIS_URL`             | `redis://redis:6379/0`                                           | Redis DSN                      |
 | `LLM_SERVER_URL`        | `http://localhost:8001`                                          | LLM inference server           |
+| `LLM_ENDPOINT`          | `/v1/chat/completions`                                           | LLM inference endpoint path    |
+| `LLM_MODEL_NAME`        | `fraud-detector-v1`                                              | Model name in request body     |
+| `LLM_SYSTEM_PROMPT_PATH`| _(empty)_                                                        | Path to system prompt; empty = bundled default |
+| `RAG_ENABLED`           | `true`                                                           | Enable fraud pattern RAG retrieval |
 | `API_KEYS`              | _(none)_                                                         | Comma-separated valid API keys |
 | `JWT_SECRET_KEY`        | `change-me-in-production`                                        | **Must change in prod**        |
 | `RISK_ALLOW_THRESHOLD`  | `0.3`                                                            | Score below which → allow      |
@@ -94,7 +108,7 @@ docker compose up --build
 Services started:
 
 - `api` — FastAPI on port **8000**
-- `postgres` — PostgreSQL on port **5432**
+- `postgres` — PostgreSQL 16 with **pgvector** extension on port **5432**
 - `redis` — Redis on port **6379**
 
 ### 3 — Run database migrations
@@ -176,6 +190,73 @@ Submit a human decision for a queued item.
 
 ```json
 { "decision": "allow", "reviewer": "analyst@example.com", "notes": "..." }
+```
+
+---
+
+## Vector Store & RAG
+
+### Overview
+
+The integration layer uses **pgvector** (bundled in the `pgvector/pgvector:pg16` Docker image) for two purposes:
+
+| Purpose | Table | Description |
+| ------- | ----- | ----------- |
+| Session embedding store | `session_embeddings` | Stores per-turn text embeddings for in-session context deviation detection. Rows expire via `expires_at` column (TTL configurable in `classifiers.yaml`). |
+| Fraud pattern knowledge base | `fraud_patterns` | 27 seed examples of known fraud patterns, embedded at startup. Used for RAG retrieval at inference time. |
+
+Both tables carry `vector(768)` columns with **IVFFlat cosine** indexes (created by migration `0002`).
+
+### Embedding model
+
+All embeddings use **`all-mpnet-base-v2`** (768-dim), loaded once per process as a lazy singleton in `vector_store/encoder.py`. The model ID and embedding dimension are configurable in `configs/classifiers.yaml` under the `embeddings:` section.
+
+### RAG pipeline (per request)
+
+```
+Input text
+   │
+   ▼ embed_text()                     (shared, computed once per request)
+   │
+   ├─► search_fraud_patterns()        (ANN cosine search, top-K ≥ similarity threshold)
+   │        │
+   │        ▼ format_rag_context()    → [CONTEXT: ...] reference block
+   │
+   └─► _call_llm(rag_context=...)     → injected as prefix in user message
+```
+
+The RAG context block is clearly labelled so the LLM knows it is reference material only (see Rule 9 in `configs/system_prompt.txt`). The block is token-capped (default 500 tokens) to avoid crowding the actual input.
+
+### Cross-session drift detection
+
+`context_deviation.py` uses `find_similar_recent_sessions()` (signal 6) to detect coordinated attacks: if ≥ 3 distinct sessions send near-identical content within a configurable lookback window (default 5 minutes), the `context_deviation` score is escalated and a `cross_session_coordination:N` flag is added to the result.
+
+### Configuration (`configs/classifiers.yaml`)
+
+```yaml
+embeddings:
+  model_id: "all-mpnet-base-v2"
+  dim: 768
+  session_ttl_seconds: 3600
+  turn_history_max: 20
+
+rag:
+  enabled: true
+  top_k: 3
+  min_similarity_threshold: 0.65
+  max_context_tokens: 500
+  seed_on_startup: true
+```
+
+### Knowledge base re-seeding
+
+The knowledge base seeds automatically on first startup if the `fraud_patterns` table is empty and `rag.seed_on_startup: true`. To force a re-seed after editing `configs/fraud_patterns.yaml`:
+
+```bash
+# Truncate the table, then restart the API service
+docker compose exec postgres psql -U fraud fraud_detection \
+  -c "TRUNCATE fraud_patterns;"
+docker compose restart api
 ```
 
 ---

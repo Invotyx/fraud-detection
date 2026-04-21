@@ -15,12 +15,13 @@ fraud-detection/
 │   ├── api/              # FastAPI app, pipeline orchestrator, schemas
 │   ├── audit/            # Append-only audit logger (SHA-256 hashing only)
 │   ├── classifiers/      # Rule-based signal detectors + ensemble
-│   ├── configs/          # thresholds.yaml
-│   ├── hitl/             # Human-in-the-loop queue + DB migrations
+│   ├── configs/          # classifiers.yaml, fraud_patterns.yaml, thresholds.yaml
+│   ├── hitl/             # Human-in-the-loop queue + DB migrations (0001, 0002)
 │   ├── output_validator/ # PII / system-prompt-leak validator
 │   ├── policies/         # Blocked-tool policy enforcer
 │   ├── risk_engine/      # Score aggregation
 │   ├── sanitizer/        # Input sanitizer
+│   ├── vector_store/     # pgvector client: encoder, session store, RAG retrieval
 │   ├── scripts/          # load_test.py
 │   ├── tests/
 │   │   ├── unit/         # 13 unit test modules
@@ -117,10 +118,20 @@ Pipeline (integration/api/pipeline.py)
      │
      ├─► Sanitizer          (strip control chars, length limit)
      │
+     ├─► Shared embedding   (all-mpnet-base-v2, 768-dim — computed ONCE)
+     │        │
+     │        ├─► RAG lookup          (pgvector ANN search → top-K fraud patterns)
+     │        │        └─► format_rag_context() → reference block for LLM prompt
+     │        │
+     │        └─► context_deviation   (pgvector session + cross-session drift detection)
+     │
      ├─► [parallel]
      │     ├─► LLM server   :8001  →  7 parameter scores
+     │     │        └─► OpenAI /v1/chat/completions
+     │     │             system: system_prompt.txt + Rule 9 (RAG awareness)
+     │     │             user:   [CONTEXT: RAG examples] --- INPUT TO ANALYZE: text
      │     ├─► ML classifiers (obfuscation · exfiltration · deviation)
-     │     └─► Rule-based ensemble
+     │     └─► Rule-based ensemble (embedding features → XGBoost scorer)
      │
      ├─► Aggregator         (60 % LLM + 40 % rule blend)
      │

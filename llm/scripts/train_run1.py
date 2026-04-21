@@ -146,7 +146,7 @@ def train(config: Dict[str, Any], dry_run: bool = False) -> None:
     # ---- Imports (deferred to avoid load time overhead on dry-run) ----
     import torch
     from datasets import Dataset
-    from peft import LoraConfig, get_peft_model
+    from peft import LoraConfig, get_peft_model, prepare_model_for_kbit_training
     from transformers import (
         AutoModelForCausalLM,
         AutoTokenizer,
@@ -205,6 +205,11 @@ def train(config: Dict[str, Any], dry_run: bool = False) -> None:
         print(f"  Model loaded. VRAM used: {vram_gb:.2f} GB")
 
     # ---- LoRA ----
+    t_cfg = config["training"]
+    model = prepare_model_for_kbit_training(
+        model,
+        use_gradient_checkpointing=t_cfg.get("gradient_checkpointing", True),
+    )
     lora_cfg = config["lora"]
     lora_config = LoraConfig(
         r=lora_cfg["r"],
@@ -223,7 +228,6 @@ def train(config: Dict[str, Any], dry_run: bool = False) -> None:
     val_dataset = Dataset.from_list(val_data)
 
     # ---- Training arguments ----
-    t_cfg = config["training"]
     output_dir = t_cfg["output_dir"]
     Path(output_dir).mkdir(parents=True, exist_ok=True)
 

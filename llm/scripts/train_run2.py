@@ -129,7 +129,7 @@ def train(
 
     import torch
     from datasets import Dataset
-    from peft import LoraConfig, PeftModel, get_peft_model
+    from peft import LoraConfig, PeftModel, get_peft_model, prepare_model_for_kbit_training
     from transformers import (
         AutoModelForCausalLM,
         AutoTokenizer,
@@ -191,6 +191,13 @@ def train(
     else:
         model = base_model
 
+    t_cfg = config["training"]
+
+    model = prepare_model_for_kbit_training(
+        model,
+        use_gradient_checkpointing=t_cfg.get("gradient_checkpointing", True),
+    )
+
     lora_cfg = config["lora"]
     lora_config = LoraConfig(
         r=lora_cfg["r"],
@@ -206,7 +213,6 @@ def train(
     train_dataset = Dataset.from_list(train_data)
     val_dataset = Dataset.from_list(val_data)
 
-    t_cfg = config["training"]
     output_dir = t_cfg["output_dir"]
     Path(output_dir).mkdir(parents=True, exist_ok=True)
 

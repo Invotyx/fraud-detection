@@ -181,7 +181,7 @@ def run_targeted_fix(
 
     import torch
     from datasets import Dataset
-    from peft import LoraConfig, PeftModel, get_peft_model
+    from peft import LoraConfig, PeftModel, get_peft_model, prepare_model_for_kbit_training
     from transformers import (
         AutoModelForCausalLM,
         AutoTokenizer,
@@ -232,6 +232,11 @@ def run_targeted_fix(
         model = model.merge_and_unload()
     else:
         model = base_model
+
+    model = prepare_model_for_kbit_training(
+        model,
+        use_gradient_checkpointing=True,
+    )
 
     lora_config = LoraConfig(
         r=16, lora_alpha=32, lora_dropout=0.05,

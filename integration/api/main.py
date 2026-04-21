@@ -11,7 +11,7 @@ from uuid import UUID, uuid4
 
 from fastapi import Depends, FastAPI, Header, HTTPException, Request, status
 from fastapi.middleware.cors import CORSMiddleware
-from fastapi.responses import JSONResponse
+from fastapi.responses import HTMLResponse, JSONResponse
 from sqlalchemy.ext.asyncio import AsyncConnection, AsyncEngine, create_async_engine
 
 from integration.api.config import get_settings
@@ -161,6 +161,27 @@ def create_app() -> FastAPI:
     # ----------------------------------------------------------------
     # Routes
     # ----------------------------------------------------------------
+
+    # ----------------------------------------------------------------
+    # Dev test UI  (disabled in production)
+    # ----------------------------------------------------------------
+    if settings.app_env != "production":
+        import os as _os
+        _DEV_HTML = _os.path.join(
+            _os.path.dirname(__file__), "..", "dev_test.html"
+        )
+
+        @app.get("/dev", response_class=HTMLResponse, include_in_schema=False)
+        async def dev_ui() -> HTMLResponse:
+            """Serve the dev test UI. Available only outside production."""
+            try:
+                with open(_DEV_HTML, "r", encoding="utf-8") as fh:
+                    return HTMLResponse(content=fh.read())
+            except FileNotFoundError:
+                raise HTTPException(
+                    status_code=404,
+                    detail="dev_test.html not found — run from the integration/ directory.",
+                )
 
     @app.get("/health", tags=["ops"])
     async def health(db: AsyncConnection = Depends(get_db)) -> JSONResponse:

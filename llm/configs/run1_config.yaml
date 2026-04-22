@@ -6,7 +6,7 @@ _base: base_config.yaml
 training:
   output_dir: "checkpoints/run1"
   num_train_epochs: 3
-  learning_rate: 2.0e-4
+  learning_rate: 5.0e-5 # reduced from 2e-4: original LR caused loss collapse to ~0 by step 100
 
 experiment:
   wandb_run_name: "run1-resilience"

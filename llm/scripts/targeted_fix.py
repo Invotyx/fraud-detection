@@ -251,7 +251,8 @@ def run_targeted_fix(
         num_train_epochs=num_epochs,
         learning_rate=5e-5,  # lower LR for targeted fine-tuning
         fp16=True,
-        gradient_checkpointing=True,
+        # FSDP: activation_checkpointing in fsdp_config instead
+        gradient_checkpointing=False,
         optim="adamw_torch",              # standard AdamW; paged_adamw requires bitsandbytes
         lr_scheduler_type="cosine",
         warmup_ratio=0.05,
@@ -268,6 +269,7 @@ def run_targeted_fix(
             "offload_params": False,
             "use_orig_params": True,
             "sync_module_states": True,
+            "activation_checkpointing": True,
         },
     )
 

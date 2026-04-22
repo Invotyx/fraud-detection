@@ -236,6 +236,7 @@ def train(config: Dict[str, Any], dry_run: bool = False) -> None:
         "offload_params": fsdp_cfg.get("offload_params", False),
         "use_orig_params": fsdp_cfg.get("use_orig_params", True),
         "sync_module_states": fsdp_cfg.get("sync_module_states", True),
+        "activation_checkpointing": fsdp_cfg.get("activation_checkpointing", True),
     } if fsdp_strategy else {}
 
     training_args = TrainingArguments(
@@ -246,14 +247,15 @@ def train(config: Dict[str, Any], dry_run: bool = False) -> None:
         learning_rate=float(t_cfg["learning_rate"]),
         fp16=t_cfg.get("fp16", True),
         bf16=t_cfg.get("bf16", False),
-        gradient_checkpointing=t_cfg.get("gradient_checkpointing", True),
+        # FSDP: activation_checkpointing in fsdp_config instead
+        gradient_checkpointing=False,
         optim=t_cfg.get("optim", "adamw_torch"),
         lr_scheduler_type=t_cfg.get("lr_scheduler_type", "cosine"),
         warmup_ratio=t_cfg.get("warmup_ratio", 0.05),
         logging_steps=t_cfg.get("logging_steps", 25),
         save_steps=t_cfg.get("save_steps", 100),
         eval_steps=t_cfg.get("eval_steps", 100),
-        evaluation_strategy=t_cfg.get("evaluation_strategy", "steps"),
+        eval_strategy=t_cfg.get("eval_strategy", "steps"),
         save_total_limit=t_cfg.get("save_total_limit", 3),
         load_best_model_at_end=t_cfg.get("load_best_model_at_end", True),
         metric_for_best_model=t_cfg.get("metric_for_best_model", "eval_loss"),

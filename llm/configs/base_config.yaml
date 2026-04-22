@@ -25,6 +25,7 @@ fsdp:
   offload_params: false
   use_orig_params: true
   sync_module_states: true # rank-0 broadcasts weights; other ranks skip disk I/O
+  activation_checkpointing: true # replaces gradient_checkpointing in TrainingArguments for FSDP
 
 lora:
   r: 16
@@ -46,14 +47,14 @@ training:
   learning_rate: 2.0e-4
   fp16: true
   bf16: false
-  gradient_checkpointing: true
+  gradient_checkpointing: false # FSDP: use activation_checkpointing in fsdp block instead
   optim: "adamw_torch" # paged_adamw_32bit requires bitsandbytes; use standard AdamW
   lr_scheduler_type: "cosine"
   warmup_ratio: 0.05
   logging_steps: 25
   save_steps: 100
   eval_steps: 100
-  evaluation_strategy: "steps" # re-enabled: FSDP gives enough VRAM headroom for eval
+  eval_strategy: "steps" # re-enabled: FSDP gives enough VRAM headroom for eval
   save_total_limit: 3
   load_best_model_at_end: true
   metric_for_best_model: "eval_loss"

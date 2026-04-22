@@ -149,50 +149,51 @@ echo "[7/8] Installing experiment tracking (W&B + MLflow)..."
 pip install -q wandb mlflow
 
 # ---------------------------------------------------------------------------
-# 8. Verify model can load in 4-bit
+# 8. Verify model can load fp16 for FSDP training
 # ---------------------------------------------------------------------------
-echo "[8/8] Verifying 4-bit quantized model loads without OOM..."
+echo "[8/8] Verifying fp16 model loads to CPU (FSDP will shard to GPUs at training time)..."
 python - <<'PYEOF'
 import torch
-from transformers import AutoModelForCausalLM, AutoTokenizer, BitsAndBytesConfig
+from transformers import AutoModelForCausalLM, AutoTokenizer
 
 MODEL_ID = "meta-llama/Meta-Llama-3.1-8B-Instruct"
-print(f"  Loading {MODEL_ID} in 4-bit...")
-
-bnb_config = BitsAndBytesConfig(
-    load_in_4bit=True,
-    bnb_4bit_compute_dtype=torch.float16,
-    bnb_4bit_quant_type="nf4",
-    bnb_4bit_use_double_quant=True,
-)
+print(f"  Loading {MODEL_ID} in fp16 (CPU, low_cpu_mem_usage=True)...")
+# Training uses FSDP full_shard: model loads to CPU on each process, then
+# FSDP shards it across all GPUs. With 4× T4 (16 GB each), each GPU holds
+# ~4 GB of the 16 GB fp16 model — no quantization needed.
 
 try:
     model = AutoModelForCausalLM.from_pretrained(
         MODEL_ID,
-        quantization_config=bnb_config,
-        device_map="auto",
+        torch_dtype=torch.float16,
+        low_cpu_mem_usage=True,
         trust_remote_code=False,
     )
     tokenizer = AutoTokenizer.from_pretrained(MODEL_ID, trust_remote_code=False)
-    if torch.cuda.is_available():
-        alloc = torch.cuda.memory_allocated() / 1024**3
-        print(f"  Model loaded successfully. VRAM used: {alloc:.2f} GB")
-    else:
-        print("  Model loaded on CPU (CUDA not available)")
+    param_gb = sum(p.numel() * p.element_size() for p in model.parameters()) / 1024**3
+    print(f"  Model loaded successfully. fp16 parameter size: {param_gb:.2f} GB")
+    print(f"  With FSDP full_shard across 4 GPUs: ~{param_gb/4:.2f} GB per GPU")
     del model
 except Exception as exc:
     print(f"  WARN: {MODEL_ID} failed to load: {exc}")
     print("  Falling back to mistralai/Mistral-7B-Instruct-v0.3")
     model = AutoModelForCausalLM.from_pretrained(
         "mistralai/Mistral-7B-Instruct-v0.3",
-        quantization_config=bnb_config,
-        device_map="auto",
+        torch_dtype=torch.float16,
+        low_cpu_mem_usage=True,
         trust_remote_code=True,
     )
-    if torch.cuda.is_available():
-        alloc = torch.cuda.memory_allocated() / 1024**3
-        print(f"  Fallback loaded. VRAM used: {alloc:.2f} GB")
+    param_gb = sum(p.numel() * p.element_size() for p in model.parameters()) / 1024**3
+    print(f"  Fallback loaded. fp16 parameter size: {param_gb:.2f} GB")
     del model
+
+if torch.cuda.is_available():
+    n = torch.cuda.device_count()
+    total_vram = sum(torch.cuda.get_device_properties(i).total_memory for i in range(n)) / 1024**3
+    print(f"  GPUs available: {n} × {torch.cuda.get_device_name(0)} (total VRAM: {total_vram:.0f} GB)")
+    print(f"  torchrun will use all {n} GPUs via FSDP full_shard")
+else:
+    print("  WARNING: CUDA not available — training will run on CPU (very slow)")
 
 print("  Environment setup COMPLETE.")
 PYEOF

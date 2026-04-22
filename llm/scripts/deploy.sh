@@ -28,6 +28,7 @@ fi
 VENV_DIR="${VENV_DIR:-${HOME}/venv}"
 DATA_DIR="${DATA_DIR:-${PROJECT_ROOT}/llm/data}"
 CHECKPOINTS_DIR="${CHECKPOINTS_DIR:-${PROJECT_ROOT}/checkpoints}"
+STATE_DIR="${STATE_DIR:-${PROJECT_ROOT}/.deploy_state}"
 BASE_MODEL_ID="${BASE_MODEL_ID:-meta-llama/Meta-Llama-3.1-8B-Instruct}"
 DATASET_COUNT="${DATASET_COUNT:-600}"
 LLM_SERVER_PORT="${LLM_SERVER_PORT:-8001}"
@@ -57,15 +58,21 @@ warn_step() {
 }
 
 cd "${PROJECT_ROOT}"
+mkdir -p "${STATE_DIR}"
 
 # =============================================================================
 # Phase 0 — Environment Setup
 # =============================================================================
 step "Phase 0: Environment Setup"
-bash llm/scripts/setup.sh
-done_step "setup.sh"
+if [[ -f "${STATE_DIR}/phase0.done" ]]; then
+    warn_step "Phase 0 already completed — skipping"
+else
+    bash llm/scripts/setup.sh
+    touch "${STATE_DIR}/phase0.done"
+    done_step "setup.sh"
+fi
 
-# Activate virtual environment for all subsequent Python steps
+# Always activate venv (even when Phase 0 is skipped)
 # shellcheck disable=SC1090
 source "${VENV_DIR}/bin/activate"
 
@@ -73,63 +80,99 @@ source "${VENV_DIR}/bin/activate"
 # Phase 1 — Dataset Preparation
 # =============================================================================
 step "Phase 1: Dataset Preparation"
-python llm/scripts/prepare_data.py \
-    --output-dir "${DATA_DIR}" \
-    --count "${DATASET_COUNT}"
-done_step "prepare_data.py"
+if [[ -f "${STATE_DIR}/phase1.done" ]]; then
+    warn_step "Phase 1 already completed — skipping"
+else
+    python llm/scripts/prepare_data.py \
+        --output-dir "${DATA_DIR}" \
+        --count "${DATASET_COUNT}"
+    touch "${STATE_DIR}/phase1.done"
+    done_step "prepare_data.py"
+fi
 
 # =============================================================================
 # Phase 2 — System Prompt Adversarial Testing (pre-training baseline)
 # =============================================================================
 step "Phase 2: System Prompt Adversarial Testing (pre-training baseline)"
-if python llm/scripts/test_system_prompt.py \
-    --local \
-    --model "${BASE_MODEL_ID}" \
-    --verbose;then
-    done_step "test_system_prompt.py"
+if [[ -f "${STATE_DIR}/phase2.done" ]]; then
+    warn_step "Phase 2 already completed — skipping"
 else
-    if [[ "${PROMPT_TEST_STRICT}" == "1" ]]; then
-        echo "System prompt baseline failed and PROMPT_TEST_STRICT=1; stopping deployment."
-        exit 1
+    if python llm/scripts/test_system_prompt.py \
+        --local \
+        --model "${BASE_MODEL_ID}" \
+        --verbose; then
+        touch "${STATE_DIR}/phase2.done"
+        done_step "test_system_prompt.py"
+    else
+        if [[ "${PROMPT_TEST_STRICT}" == "1" ]]; then
+            echo "System prompt baseline failed and PROMPT_TEST_STRICT=1; stopping deployment."
+            exit 1
+        fi
+        touch "${STATE_DIR}/phase2.done"
+        warn_step "test_system_prompt.py failed baseline threshold; continuing (advisory)"
     fi
-    warn_step "test_system_prompt.py failed baseline threshold; continuing to later phases because this stage is advisory by default"
 fi
 
 # =============================================================================
 # Phase 3 — Fine-Tuning Run 1: Resilient Behavior
 # =============================================================================
 step "Phase 3: Fine-Tuning Run 1 — Resilient Behavior"
-python llm/scripts/train_run1.py \
-    --config llm/configs/run1_config.yaml
-done_step "train_run1.py"
+if [[ -f "${STATE_DIR}/phase3.done" ]]; then
+    warn_step "Phase 3 already completed — skipping"
+else
+    python llm/scripts/train_run1.py \
+        --config llm/configs/run1_config.yaml
+    touch "${STATE_DIR}/phase3.done"
+    done_step "train_run1.py"
+fi
 
 # =============================================================================
 # Phase 4 — Fine-Tuning Run 2: Fraud Detection Accuracy
 # =============================================================================
 step "Phase 4: Fine-Tuning Run 2 — Fraud Detection Accuracy"
-python llm/scripts/train_run2.py \
-    --config llm/configs/run2_config.yaml \
-    --from-checkpoint "${CHECKPOINTS_DIR}/run1/final"
-done_step "train_run2.py"
+if [[ -f "${STATE_DIR}/phase4.done" ]]; then
+    warn_step "Phase 4 already completed — skipping"
+else
+    python llm/scripts/train_run2.py \
+        --config llm/configs/run2_config.yaml \
+        --from-checkpoint "${CHECKPOINTS_DIR}/run1/final"
+    touch "${STATE_DIR}/phase4.done"
+    done_step "train_run2.py"
+fi
 
 # =============================================================================
 # Phase 5 — Targeted Fix (weak parameter remediation)
 # =============================================================================
 step "Phase 5: Targeted Fix — Weak Parameter Remediation"
-python llm/scripts/targeted_fix.py \
-    --eval-results "${CHECKPOINTS_DIR}/run2/eval_results.json" \
-    --checkpoint "${CHECKPOINTS_DIR}/run2/final" \
-    --output-dir "${CHECKPOINTS_DIR}/run3"
-done_step "targeted_fix.py"
+if [[ -f "${STATE_DIR}/phase5.done" ]]; then
+    warn_step "Phase 5 already completed — skipping"
+else
+    python llm/scripts/targeted_fix.py \
+        --eval-results "${CHECKPOINTS_DIR}/run2/eval_results.json" \
+        --checkpoint "${CHECKPOINTS_DIR}/run2/final" \
+        --output-dir "${CHECKPOINTS_DIR}/run3"
+    touch "${STATE_DIR}/phase5.done"
+    done_step "targeted_fix.py"
+fi
 
 # =============================================================================
 # Phase 6 — Merge LoRA and Serve
 # =============================================================================
 step "Phase 6: Merge LoRA Adapter and Start Inference Server"
-python llm/scripts/merge_and_serve.py \
-    --checkpoint "${CHECKPOINTS_DIR}/run2/final" \
-    --merged-dir "${CHECKPOINTS_DIR}/final_merged" \
-    --port 8001 &
+if [[ -f "${STATE_DIR}/phase6.done" ]]; then
+    warn_step "Phase 6 merge already completed — starting server against existing merged dir"
+    python llm/scripts/merge_and_serve.py \
+        --checkpoint "${CHECKPOINTS_DIR}/run2/final" \
+        --merged-dir "${CHECKPOINTS_DIR}/final_merged" \
+        --port 8001 \
+        --skip-merge &
+else
+    python llm/scripts/merge_and_serve.py \
+        --checkpoint "${CHECKPOINTS_DIR}/run2/final" \
+        --merged-dir "${CHECKPOINTS_DIR}/final_merged" \
+        --port 8001 &
+    touch "${STATE_DIR}/phase6.done"
+fi
 
 echo "Waiting ${SERVER_STARTUP_WAIT_SECONDS}s for the server to become ready..."
 sleep "${SERVER_STARTUP_WAIT_SECONDS}"
@@ -139,29 +182,44 @@ done_step "merge_and_serve.py (server running in background)"
 # Phase 7a — Evaluation on held-out test set
 # =============================================================================
 step "Phase 7a: Evaluation — Held-Out Test Set"
-python llm/scripts/eval.py \
-    --server-url "${SERVER_URL}" \
-    --test-data "${DATA_DIR}/test.jsonl" \
-    --output "${CHECKPOINTS_DIR}/run2/eval_results.json"
-done_step "eval.py"
+if [[ -f "${STATE_DIR}/phase7a.done" ]]; then
+    warn_step "Phase 7a already completed — skipping"
+else
+    python llm/scripts/eval.py \
+        --server-url "${SERVER_URL}" \
+        --test-data "${DATA_DIR}/test.jsonl" \
+        --output "${CHECKPOINTS_DIR}/run2/eval_results.json"
+    touch "${STATE_DIR}/phase7a.done"
+    done_step "eval.py"
+fi
 
 # =============================================================================
 # Phase 7b — Red-Team Adversarial Probing
 # =============================================================================
 step "Phase 7b: Red-Team Adversarial Probing"
-python llm/scripts/red_team.py \
-    --server-url "${SERVER_URL}" \
-    --output "${CHECKPOINTS_DIR}/red_team_report.json"
-done_step "red_team.py"
+if [[ -f "${STATE_DIR}/phase7b.done" ]]; then
+    warn_step "Phase 7b already completed — skipping"
+else
+    python llm/scripts/red_team.py \
+        --server-url "${SERVER_URL}" \
+        --output "${CHECKPOINTS_DIR}/red_team_report.json"
+    touch "${STATE_DIR}/phase7b.done"
+    done_step "red_team.py"
+fi
 
 # =============================================================================
 # Phase 8 — Harden (checksums, systemd, CloudWatch)
 # =============================================================================
 step "Phase 8: Harden — Lock Model, Checksums, systemd, CloudWatch"
-bash llm/scripts/harden.sh \
-    --merged-dir "${CHECKPOINTS_DIR}/final_merged" \
-    --port "${LLM_SERVER_PORT}"
-done_step "harden.sh"
+if [[ -f "${STATE_DIR}/phase8.done" ]]; then
+    warn_step "Phase 8 already completed — skipping"
+else
+    bash llm/scripts/harden.sh \
+        --merged-dir "${CHECKPOINTS_DIR}/final_merged" \
+        --port "${LLM_SERVER_PORT}"
+    touch "${STATE_DIR}/phase8.done"
+    done_step "harden.sh"
+fi
 
 # =============================================================================
 echo ""

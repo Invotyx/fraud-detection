@@ -283,7 +283,8 @@ def train(config: Dict[str, Any], dry_run: bool = False) -> None:
     # Auto-resume from latest checkpoint if one exists (handles OOM restarts)
     last_checkpoint = None
     if Path(output_dir).is_dir():
-        ckpts = sorted(Path(output_dir).glob("checkpoint-*"), key=lambda p: int(p.name.split("-")[-1]))
+        ckpts = sorted(Path(output_dir).glob("checkpoint-*"),
+                       key=lambda p: int(p.name.split("-")[-1]))
         if ckpts:
             last_checkpoint = str(ckpts[-1])
             if is_main:

@@ -146,58 +146,51 @@ def train(config: Dict[str, Any], dry_run: bool = False) -> None:
     # ---- Imports (deferred to avoid load time overhead on dry-run) ----
     import torch
     from datasets import Dataset
-    from peft import LoraConfig, get_peft_model, prepare_model_for_kbit_training
+    from peft import LoraConfig, get_peft_model
     from transformers import (
         AutoModelForCausalLM,
         AutoTokenizer,
-        BitsAndBytesConfig,
         TrainingArguments,
     )
     from trl import SFTTrainer
 
+    # ---- Distributed context (set by torchrun) ----
+    local_rank = int(os.environ.get("LOCAL_RANK", 0))
+    is_main = local_rank == 0
+
     # ---- Experiment tracking ----
     exp = config.get("experiment", {})
-    if exp.get("report_to") == "wandb":
+    if exp.get("report_to") == "wandb" and is_main:
         os.environ.setdefault("WANDB_PROJECT", exp.get(
             "wandb_project", "fraud-detection-llm"))
         os.environ.setdefault(
             "WANDB_RUN_NAME", exp.get("wandb_run_name", "run1"))
 
-    # ---- Model + quantization ----
+    # ---- Model — fp16, loaded to CPU so FSDP can shard to GPUs ----
+    # No quantization needed: with 4× T4 (16 GB each) and FSDP full_shard,
+    # each GPU holds only ~4 GB of the 8B fp16 model.
     model_id = config["model"]["base_model_id"]
-    print(f"\nLoading {model_id} in 4-bit...")
-
-    bnb_cfg = config["quantization"]
-    bnb_config = BitsAndBytesConfig(
-        load_in_4bit=bnb_cfg["load_in_4bit"],
-        bnb_4bit_compute_dtype=torch.float16,
-        bnb_4bit_quant_type=bnb_cfg.get("bnb_4bit_quant_type", "nf4"),
-        bnb_4bit_use_double_quant=bnb_cfg.get(
-            "bnb_4bit_use_double_quant", True),
-    )
-
-    # device_map="auto" conflicts with multi-GPU DDP launched via accelerate.
-    # When accelerate assigns a local rank, let it handle device placement.
-    _device_map = None if os.environ.get("LOCAL_RANK") else "auto"
+    if is_main:
+        print(
+            f"\nLoading {model_id} in fp16 (CPU → FSDP will shard to GPUs)...")
 
     try:
         model = AutoModelForCausalLM.from_pretrained(
             model_id,
-            quantization_config=bnb_config,
-            device_map=_device_map,
             torch_dtype=torch.float16,
+            low_cpu_mem_usage=True,
             trust_remote_code=config["model"].get("trust_remote_code", False),
         )
         tokenizer = AutoTokenizer.from_pretrained(model_id)
     except Exception as exc:
         fallback = config["model"]["fallback_model_id"]
-        print(
-            f"  Warning: {model_id} failed ({exc}). Trying fallback {fallback}...")
+        if is_main:
+            print(
+                f"  Warning: {model_id} failed ({exc}). Trying fallback {fallback}...")
         model = AutoModelForCausalLM.from_pretrained(
             fallback,
-            quantization_config=bnb_config,
-            device_map=_device_map,
             torch_dtype=torch.float16,
+            low_cpu_mem_usage=True,
             trust_remote_code=True,
         )
         tokenizer = AutoTokenizer.from_pretrained(
@@ -206,16 +199,11 @@ def train(config: Dict[str, Any], dry_run: bool = False) -> None:
     tokenizer.pad_token = tokenizer.eos_token
     tokenizer.padding_side = "right"
 
-    if torch.cuda.is_available():
-        vram_gb = torch.cuda.memory_allocated() / 1024**3
-        print(f"  Model loaded. VRAM used: {vram_gb:.2f} GB")
+    if is_main:
+        print("  Model loaded to CPU. FSDP will shard across GPUs during training.")
 
-    # ---- LoRA ----
+    # ---- LoRA — applied before FSDP wrapping ----
     t_cfg = config["training"]
-    model = prepare_model_for_kbit_training(
-        model,
-        use_gradient_checkpointing=t_cfg.get("gradient_checkpointing", True),
-    )
     lora_cfg = config["lora"]
     lora_config = LoraConfig(
         r=lora_cfg["r"],
@@ -237,6 +225,19 @@ def train(config: Dict[str, Any], dry_run: bool = False) -> None:
     output_dir = t_cfg["output_dir"]
     Path(output_dir).mkdir(parents=True, exist_ok=True)
 
+    # FSDP config — read from YAML fsdp block; Trainer uses torchrun env vars
+    fsdp_cfg = config.get("fsdp", {})
+    fsdp_strategy = fsdp_cfg.get(
+        "strategy", "full_shard auto_wrap") if fsdp_cfg.get("enabled", False) else ""
+    fsdp_hf_config = {
+        "min_num_params": fsdp_cfg.get("min_num_params", 1e8),
+        "backward_prefetch": fsdp_cfg.get("backward_prefetch", "backward_pre"),
+        "forward_prefetch": fsdp_cfg.get("forward_prefetch", False),
+        "offload_params": fsdp_cfg.get("offload_params", False),
+        "use_orig_params": fsdp_cfg.get("use_orig_params", True),
+        "sync_module_states": fsdp_cfg.get("sync_module_states", True),
+    } if fsdp_strategy else {}
+
     training_args = TrainingArguments(
         output_dir=output_dir,
         per_device_train_batch_size=t_cfg["per_device_train_batch_size"],
@@ -246,7 +247,7 @@ def train(config: Dict[str, Any], dry_run: bool = False) -> None:
         fp16=t_cfg.get("fp16", True),
         bf16=t_cfg.get("bf16", False),
         gradient_checkpointing=t_cfg.get("gradient_checkpointing", True),
-        optim=t_cfg.get("optim", "paged_adamw_32bit"),
+        optim=t_cfg.get("optim", "adamw_torch"),
         lr_scheduler_type=t_cfg.get("lr_scheduler_type", "cosine"),
         warmup_ratio=t_cfg.get("warmup_ratio", 0.05),
         logging_steps=t_cfg.get("logging_steps", 25),
@@ -259,6 +260,8 @@ def train(config: Dict[str, Any], dry_run: bool = False) -> None:
         report_to=exp.get("report_to", "none"),
         run_name=exp.get("wandb_run_name"),
         seed=seed,
+        fsdp=fsdp_strategy,
+        fsdp_config=fsdp_hf_config if fsdp_hf_config else None,
     )
 
     # ---- SFT Trainer ----
@@ -276,12 +279,14 @@ def train(config: Dict[str, Any], dry_run: bool = False) -> None:
     print(f"\nStarting Run 1 training → {output_dir}")
     trainer.train()
 
-    print(f"\nSaving final checkpoint to {output_dir}/final...")
+    # FSDP consolidates state dict on rank 0 before saving; other ranks wait.
+    if is_main:
+        print(f"\nSaving final checkpoint to {output_dir}/final...")
     trainer.save_model(f"{output_dir}/final")
-    tokenizer.save_pretrained(f"{output_dir}/final")
-
-    print("\nRun 1 training complete.")
-    print("Next step: evaluate with python llm/scripts/eval.py --checkpoint checkpoints/run1/final")
+    if is_main:
+        tokenizer.save_pretrained(f"{output_dir}/final")
+        print("\nRun 1 training complete.")
+        print("Next step: evaluate with python llm/scripts/eval.py --checkpoint checkpoints/run1/final")
 
 
 # ---------------------------------------------------------------------------

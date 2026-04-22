@@ -182,21 +182,17 @@ def run_targeted_fix(
 
     import torch
     from datasets import Dataset
-    from peft import LoraConfig, PeftModel, get_peft_model, prepare_model_for_kbit_training
+    from peft import LoraConfig, PeftModel, get_peft_model
     from transformers import (
         AutoModelForCausalLM,
         AutoTokenizer,
-        BitsAndBytesConfig,
         TrainingArguments,
     )
     from trl import SFTTrainer
 
-    bnb_config = BitsAndBytesConfig(
-        load_in_4bit=True,
-        bnb_4bit_compute_dtype=torch.float16,
-        bnb_4bit_quant_type="nf4",
-        bnb_4bit_use_double_quant=True,
-    )
+    # ---- Distributed context (set by torchrun) ----
+    local_rank = int(os.environ.get("LOCAL_RANK", 0))
+    is_main = local_rank == 0
 
     # Detect base model from checkpoint adapter config
     adapter_config_path = Path(checkpoint) / "adapter_config.json"
@@ -208,21 +204,23 @@ def run_targeted_fix(
     else:
         base_model_id = "meta-llama/Meta-Llama-3.1-8B-Instruct"
 
-    print(f"\n  Loading base: {base_model_id}")
-    _device_map = None if os.environ.get("LOCAL_RANK") else "auto"
+    if is_main:
+        print(
+            f"\n  Loading base: {base_model_id} in fp16 (CPU → FSDP will shard to GPUs)...")
     try:
         base_model = AutoModelForCausalLM.from_pretrained(
-            base_model_id, quantization_config=bnb_config, device_map=_device_map,
+            base_model_id,
             torch_dtype=torch.float16,
+            low_cpu_mem_usage=True,
         )
         tokenizer = AutoTokenizer.from_pretrained(checkpoint)
     except Exception as exc:
-        print(f"  Fallback to Mistral-7B: {exc}")
+        if is_main:
+            print(f"  Fallback to Mistral-7B: {exc}")
         base_model = AutoModelForCausalLM.from_pretrained(
             "mistralai/Mistral-7B-Instruct-v0.3",
-            quantization_config=bnb_config,
-            device_map=_device_map,
             torch_dtype=torch.float16,
+            low_cpu_mem_usage=True,
             trust_remote_code=False,
         )
         tokenizer = AutoTokenizer.from_pretrained(
@@ -237,11 +235,6 @@ def run_targeted_fix(
     else:
         model = base_model
 
-    model = prepare_model_for_kbit_training(
-        model,
-        use_gradient_checkpointing=True,
-    )
-
     lora_config = LoraConfig(
         r=16, lora_alpha=32, lora_dropout=0.05,
         target_modules=["q_proj", "v_proj", "k_proj", "o_proj"],
@@ -254,12 +247,12 @@ def run_targeted_fix(
     training_args = TrainingArguments(
         output_dir=output_dir,
         per_device_train_batch_size=2,
-        gradient_accumulation_steps=8,
+        gradient_accumulation_steps=4,    # 4 GPUs × 4 steps = 16 effective
         num_train_epochs=num_epochs,
         learning_rate=5e-5,  # lower LR for targeted fine-tuning
         fp16=True,
         gradient_checkpointing=True,
-        optim="paged_adamw_32bit",
+        optim="adamw_torch",              # standard AdamW; paged_adamw requires bitsandbytes
         lr_scheduler_type="cosine",
         warmup_ratio=0.05,
         logging_steps=10,
@@ -267,6 +260,15 @@ def run_targeted_fix(
         save_total_limit=2,
         report_to="none",
         seed=42,
+        fsdp="full_shard auto_wrap",
+        fsdp_config={
+            "min_num_params": 1e8,
+            "backward_prefetch": "backward_pre",
+            "forward_prefetch": False,
+            "offload_params": False,
+            "use_orig_params": True,
+            "sync_module_states": True,
+        },
     )
 
     trainer = SFTTrainer(
@@ -283,10 +285,12 @@ def run_targeted_fix(
         f"\nStarting targeted fix training ({num_epochs} epochs) → {output_dir}")
     trainer.train()
 
+    # FSDP consolidates state dict on rank 0 before saving; other ranks wait.
     trainer.save_model(f"{output_dir}/final")
-    tokenizer.save_pretrained(f"{output_dir}/final")
-    print(f"\nTargeted fix complete. Saved to {output_dir}/final")
-    print("Re-run eval.py to confirm improvement.")
+    if is_main:
+        tokenizer.save_pretrained(f"{output_dir}/final")
+        print(f"\nTargeted fix complete. Saved to {output_dir}/final")
+        print("Re-run eval.py to confirm improvement.")
 
 
 # ---------------------------------------------------------------------------

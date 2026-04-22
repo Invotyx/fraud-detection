@@ -241,6 +241,8 @@ def run_targeted_fix(
         bias="none", task_type="CAUSAL_LM",
     )
     model = get_peft_model(model, lora_config)
+    # required: activation_checkpointing recompute would double KV cache size
+    model.config.use_cache = False
 
     Path(output_dir).mkdir(parents=True, exist_ok=True)
 

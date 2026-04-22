@@ -202,6 +202,8 @@ def train(
         task_type=lora_cfg["task_type"],
     )
     model = get_peft_model(model, lora_config)
+    # required: activation_checkpointing recompute would double KV cache size
+    model.config.use_cache = False
     model.print_trainable_parameters()
 
     train_dataset = Dataset.from_list(train_data)

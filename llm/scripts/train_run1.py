@@ -215,6 +215,8 @@ def train(config: Dict[str, Any], dry_run: bool = False) -> None:
     )
 
     model = get_peft_model(model, lora_config)
+    # required: activation_checkpointing recompute would double KV cache size
+    model.config.use_cache = False
     model.print_trainable_parameters()
 
     # ---- Datasets ----

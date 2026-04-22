@@ -264,8 +264,17 @@ def train(
         packing=False,
     )
 
+    # Auto-resume from latest checkpoint if one exists (handles OOM restarts)
+    last_checkpoint = None
+    if Path(output_dir).is_dir():
+        ckpts = sorted(Path(output_dir).glob("checkpoint-*"), key=lambda p: int(p.name.split("-")[-1]))
+        if ckpts:
+            last_checkpoint = str(ckpts[-1])
+            if is_main:
+                print(f"  Resuming from checkpoint: {last_checkpoint}")
+
     print(f"\nStarting Run 2 training → {output_dir}")
-    trainer.train()
+    trainer.train(resume_from_checkpoint=last_checkpoint)
 
     # FSDP consolidates state dict on rank 0 before saving; other ranks wait.
     if is_main:

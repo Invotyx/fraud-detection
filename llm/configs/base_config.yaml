@@ -1,17 +1,30 @@
 # LLM Training Configuration — Shared Base
 # Override per-run in run1_config.yaml / run2_config.yaml
+#
+# Hardware target: 4× NVIDIA T4 (16 GB each, 64 GB total) on g4dn.12xlarge
+# Strategy: fp16 LoRA + FSDP full_shard — no quantization needed with 4 GPUs
+#   Each GPU holds 1/4 of the model (~4 GB) plus activations and grad buffers.
+#   Effective batch = per_device_train_batch_size × num_gpus × gradient_accumulation_steps
+#                   = 1 × 4 × 4 = 16  (same as previous single-GPU QLoRA baseline)
 
 model:
   base_model_id: "meta-llama/Meta-Llama-3.1-8B-Instruct"
   fallback_model_id: "mistralai/Mistral-7B-Instruct-v0.3"
-  max_seq_length: 1024 # fp16 lm_head + 1024 tokens keeps logit allocation under 1 GB on T4
+  max_seq_length: 2048
   trust_remote_code: false
 
-quantization:
-  load_in_4bit: true
-  bnb_4bit_compute_dtype: "float16"
-  bnb_4bit_quant_type: "nf4"
-  bnb_4bit_use_double_quant: true
+# FSDP (Fully Sharded Data Parallel) — distributes model params across all GPUs.
+# use_orig_params=True is required for LoRA (preserves frozen/trainable param split).
+# min_num_params=1e8 wraps each Llama/Mistral decoder layer (~134M params) individually.
+fsdp:
+  enabled: true
+  strategy: "full_shard auto_wrap"
+  min_num_params: 100000000 # 100M — wraps each decoder layer
+  backward_prefetch: "backward_pre"
+  forward_prefetch: false
+  offload_params: false
+  use_orig_params: true
+  sync_module_states: true # rank-0 broadcasts weights; other ranks skip disk I/O
 
 lora:
   r: 16
@@ -28,21 +41,21 @@ lora:
 training:
   output_dir: "checkpoints/run1"
   per_device_train_batch_size: 1
-  gradient_accumulation_steps: 16 # keep the same effective batch size while reducing VRAM pressure
+  gradient_accumulation_steps: 4 # 4 GPUs × 4 steps = 16 effective (matches QLoRA baseline)
   num_train_epochs: 3
   learning_rate: 2.0e-4
   fp16: true
   bf16: false
   gradient_checkpointing: true
-  optim: "paged_adamw_32bit"
+  optim: "adamw_torch" # paged_adamw_32bit requires bitsandbytes; use standard AdamW
   lr_scheduler_type: "cosine"
   warmup_ratio: 0.05
   logging_steps: 25
   save_steps: 100
   eval_steps: 100
-  evaluation_strategy: "no"   # eval forward pass OOMs on T4 (no gradient checkpointing during eval)
+  evaluation_strategy: "steps" # re-enabled: FSDP gives enough VRAM headroom for eval
   save_total_limit: 3
-  load_best_model_at_end: false  # requires evaluation_strategy != "no"
+  load_best_model_at_end: true
   metric_for_best_model: "eval_loss"
   report_to: "wandb" # set to "none" to disable W&B
 

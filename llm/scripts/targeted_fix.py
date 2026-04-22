@@ -210,7 +210,8 @@ def run_targeted_fix(
     print(f"\n  Loading base: {base_model_id}")
     try:
         base_model = AutoModelForCausalLM.from_pretrained(
-            base_model_id, quantization_config=bnb_config, device_map="auto"
+            base_model_id, quantization_config=bnb_config, device_map="auto",
+            torch_dtype=torch.float16,
         )
         tokenizer = AutoTokenizer.from_pretrained(checkpoint)
     except Exception as exc:
@@ -219,6 +220,7 @@ def run_targeted_fix(
             "mistralai/Mistral-7B-Instruct-v0.3",
             quantization_config=bnb_config,
             device_map="auto",
+            torch_dtype=torch.float16,
             trust_remote_code=False,
         )
         tokenizer = AutoTokenizer.from_pretrained(

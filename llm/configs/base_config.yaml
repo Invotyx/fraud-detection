@@ -4,7 +4,7 @@
 model:
   base_model_id: "meta-llama/Meta-Llama-3.1-8B-Instruct"
   fallback_model_id: "mistralai/Mistral-7B-Instruct-v0.3"
-  max_seq_length: 4096 # increased from 2048 to accommodate RAG context prefix (~500 tokens)
+  max_seq_length: 1024 # fp16 lm_head + 1024 tokens keeps logit allocation under 1 GB on T4
   trust_remote_code: false
 
 quantization:
@@ -27,8 +27,8 @@ lora:
 
 training:
   output_dir: "checkpoints/run1"
-  per_device_train_batch_size: 2
-  gradient_accumulation_steps: 8 # effective batch size = 16
+  per_device_train_batch_size: 1
+  gradient_accumulation_steps: 16 # keep the same effective batch size while reducing VRAM pressure
   num_train_epochs: 3
   learning_rate: 2.0e-4
   fp16: true

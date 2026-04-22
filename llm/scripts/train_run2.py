@@ -163,6 +163,7 @@ def train(
             model_id,
             quantization_config=bnb_config,
             device_map="auto",
+            torch_dtype=torch.float16,
             trust_remote_code=config["model"].get("trust_remote_code", False),
         )
         tokenizer = AutoTokenizer.from_pretrained(tokenizer_id)
@@ -173,6 +174,7 @@ def train(
             fallback,
             quantization_config=bnb_config,
             device_map="auto",
+            torch_dtype=torch.float16,
             trust_remote_code=True,
         )
         tokenizer = AutoTokenizer.from_pretrained(

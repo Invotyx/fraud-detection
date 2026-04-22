@@ -158,11 +158,12 @@ def train(
     tokenizer_id = from_checkpoint or model_id
 
     print(f"\nLoading base model: {model_id}")
+    _device_map = None if os.environ.get("LOCAL_RANK") else "auto"
     try:
         base_model = AutoModelForCausalLM.from_pretrained(
             model_id,
             quantization_config=bnb_config,
-            device_map="auto",
+            device_map=_device_map,
             torch_dtype=torch.float16,
             trust_remote_code=config["model"].get("trust_remote_code", False),
         )
@@ -173,7 +174,7 @@ def train(
         base_model = AutoModelForCausalLM.from_pretrained(
             fallback,
             quantization_config=bnb_config,
-            device_map="auto",
+            device_map=_device_map,
             torch_dtype=torch.float16,
             trust_remote_code=True,
         )

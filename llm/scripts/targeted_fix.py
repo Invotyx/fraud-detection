@@ -25,6 +25,7 @@ from __future__ import annotations
 
 import argparse
 import json
+import os
 import random
 import sys
 from pathlib import Path
@@ -208,9 +209,10 @@ def run_targeted_fix(
         base_model_id = "meta-llama/Meta-Llama-3.1-8B-Instruct"
 
     print(f"\n  Loading base: {base_model_id}")
+    _device_map = None if os.environ.get("LOCAL_RANK") else "auto"
     try:
         base_model = AutoModelForCausalLM.from_pretrained(
-            base_model_id, quantization_config=bnb_config, device_map="auto",
+            base_model_id, quantization_config=bnb_config, device_map=_device_map,
             torch_dtype=torch.float16,
         )
         tokenizer = AutoTokenizer.from_pretrained(checkpoint)
@@ -219,7 +221,7 @@ def run_targeted_fix(
         base_model = AutoModelForCausalLM.from_pretrained(
             "mistralai/Mistral-7B-Instruct-v0.3",
             quantization_config=bnb_config,
-            device_map="auto",
+            device_map=_device_map,
             torch_dtype=torch.float16,
             trust_remote_code=False,
         )

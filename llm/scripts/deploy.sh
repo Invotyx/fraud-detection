@@ -120,8 +120,13 @@ step "Phase 3: Fine-Tuning Run 1 — Resilient Behavior"
 if [[ -f "${STATE_DIR}/phase3.done" ]]; then
     warn_step "Phase 3 already completed — skipping"
 else
-    python llm/scripts/train_run1.py \
-        --config llm/configs/run1_config.yaml
+    NUM_GPUS=$(python -c "import torch; print(torch.cuda.device_count())" 2>/dev/null || echo 1)
+    if [[ "${NUM_GPUS}" -gt 1 ]]; then
+        accelerate launch --num_processes "${NUM_GPUS}" \
+            llm/scripts/train_run1.py --config llm/configs/run1_config.yaml
+    else
+        python llm/scripts/train_run1.py --config llm/configs/run1_config.yaml
+    fi
     touch "${STATE_DIR}/phase3.done"
     done_step "train_run1.py"
 fi
@@ -133,9 +138,17 @@ step "Phase 4: Fine-Tuning Run 2 — Fraud Detection Accuracy"
 if [[ -f "${STATE_DIR}/phase4.done" ]]; then
     warn_step "Phase 4 already completed — skipping"
 else
-    python llm/scripts/train_run2.py \
-        --config llm/configs/run2_config.yaml \
-        --from-checkpoint "${CHECKPOINTS_DIR}/run1/final"
+    NUM_GPUS=$(python -c "import torch; print(torch.cuda.device_count())" 2>/dev/null || echo 1)
+    if [[ "${NUM_GPUS}" -gt 1 ]]; then
+        accelerate launch --num_processes "${NUM_GPUS}" \
+            llm/scripts/train_run2.py \
+            --config llm/configs/run2_config.yaml \
+            --from-checkpoint "${CHECKPOINTS_DIR}/run1/final"
+    else
+        python llm/scripts/train_run2.py \
+            --config llm/configs/run2_config.yaml \
+            --from-checkpoint "${CHECKPOINTS_DIR}/run1/final"
+    fi
     touch "${STATE_DIR}/phase4.done"
     done_step "train_run2.py"
 fi
@@ -147,10 +160,19 @@ step "Phase 5: Targeted Fix — Weak Parameter Remediation"
 if [[ -f "${STATE_DIR}/phase5.done" ]]; then
     warn_step "Phase 5 already completed — skipping"
 else
-    python llm/scripts/targeted_fix.py \
-        --eval-results "${CHECKPOINTS_DIR}/run2/eval_results.json" \
-        --checkpoint "${CHECKPOINTS_DIR}/run2/final" \
-        --output-dir "${CHECKPOINTS_DIR}/run3"
+    NUM_GPUS=$(python -c "import torch; print(torch.cuda.device_count())" 2>/dev/null || echo 1)
+    if [[ "${NUM_GPUS}" -gt 1 ]]; then
+        accelerate launch --num_processes "${NUM_GPUS}" \
+            llm/scripts/targeted_fix.py \
+            --eval-results "${CHECKPOINTS_DIR}/run2/eval_results.json" \
+            --checkpoint "${CHECKPOINTS_DIR}/run2/final" \
+            --output-dir "${CHECKPOINTS_DIR}/run3"
+    else
+        python llm/scripts/targeted_fix.py \
+            --eval-results "${CHECKPOINTS_DIR}/run2/eval_results.json" \
+            --checkpoint "${CHECKPOINTS_DIR}/run2/final" \
+            --output-dir "${CHECKPOINTS_DIR}/run3"
+    fi
     touch "${STATE_DIR}/phase5.done"
     done_step "targeted_fix.py"
 fi

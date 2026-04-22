@@ -176,11 +176,15 @@ def train(config: Dict[str, Any], dry_run: bool = False) -> None:
             "bnb_4bit_use_double_quant", True),
     )
 
+    # device_map="auto" conflicts with multi-GPU DDP launched via accelerate.
+    # When accelerate assigns a local rank, let it handle device placement.
+    _device_map = None if os.environ.get("LOCAL_RANK") else "auto"
+
     try:
         model = AutoModelForCausalLM.from_pretrained(
             model_id,
             quantization_config=bnb_config,
-            device_map="auto",
+            device_map=_device_map,
             torch_dtype=torch.float16,
             trust_remote_code=config["model"].get("trust_remote_code", False),
         )
@@ -192,7 +196,7 @@ def train(config: Dict[str, Any], dry_run: bool = False) -> None:
         model = AutoModelForCausalLM.from_pretrained(
             fallback,
             quantization_config=bnb_config,
-            device_map="auto",
+            device_map=_device_map,
             torch_dtype=torch.float16,
             trust_remote_code=True,
         )

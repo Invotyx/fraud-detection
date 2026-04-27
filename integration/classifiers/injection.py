@@ -144,6 +144,54 @@ INJECTION_RULES: list[tuple[str, re.Pattern, float]] = [
         ),
         0.88,
     ),
+    # ---- Delimiter confusion (fake end-of-context markers) ----
+    (
+        "delimiter_confusion",
+        re.compile(
+            r'(?:'
+            r'"{3}\s*(?:END|STOP|DONE|OUTPUT|ANALYSIS|RESULT)[\s\S]{0,40}"{3}'
+            r'|---\s*(?:END|STOP|DONE)\s*---'
+            r'|<<\s*(?:END|STOP|OUTPUT)\s*>>'
+            r'|\[\[\s*END\s*\]\]'
+            r'|<END_OF_(?:ANALYSIS|CONTEXT|TASK|OUTPUT|DOCUMENT)>'
+            r'|<\|end_?of_?(?:text|document|context)\|>'
+            r')',
+            re.I,
+        ),
+        0.80,
+    ),
+    # ---- Fake task completion ("Great job! Now do X") ----
+    (
+        "fake_task_completion",
+        re.compile(
+            r'\b(?:great\s+job|well\s+done|task\s+complet(?:e|ed)|'
+            r'analysis\s+complet(?:e|ed)|process\s+complet(?:e|ed)|'
+            r'step\s+(?:one|1|two|2)\s+complet(?:e|ed))\b'
+            r'[\s\S]{0,80}'
+            r'(?:\bnew\s+task\b|\bnow\b|\bbut\b|\bhowever\b|\balso\b)',
+            re.I,
+        ),
+        0.80,
+    ),
+    # ---- Language-switching injection (foreign-language override commands) ----
+    (
+        "language_switch_injection",
+        re.compile(
+            # Chinese: 忽略 (ignore), 所有指令 (all instructions), 系统 (system)
+            r'(?:\u5ffd\u7565[\s\S]{0,30}\u6307\u4ee4'
+            # Russian: Игнорируй / проигнорируй
+            r'|\u0418\u0433\u043d\u043e\u0440\u0438\u0440\u0443\u0439'
+            r'|\u043f\u0440\u043e\u0438\u0433\u043d\u043e\u0440\u0438\u0440\u0443\u0439'
+            # Arabic: تجاهل (ignore) + التعليمات (instructions)
+            r'|\u062a\u062c\u0627\u0647\u0644[\s\S]{0,30}\u0627\u0644\u062a\u0639\u0644\u064a\u0645\u0627\u062a'
+            # Spanish/French pattern: "Ignora/Ignorez todas/toutes"
+            r'|[Ii]gnor[ae](?:z)?\s+tod(?:as|os|o)\s+las?\s+instrucciones'
+            r'|[Ii]gnorez\s+toutes\s+les\s+instructions'
+            r')',
+            re.U,
+        ),
+        0.88,
+    ),
 ]
 
 # Confidence threshold above which rule match triggers hard block
@@ -245,3 +293,46 @@ def scan_for_indirect_injection(content: str, use_ml: bool = False) -> Injection
     injections embedded in processed content, not just the user's message.
     """
     return classify_injection(content, use_ml=use_ml)
+
+
+def classify_injection_from_urls(urls: List[str]) -> InjectionResult:
+    """
+    Extract and scan URL query parameter values for injection payloads.
+
+    Catches CVE-2026-24307 / Reprompt-style attacks where the injection
+    is embedded in a URL query parameter rather than the body text.
+
+    Args:
+        urls: List of URL strings extracted from the input (e.g. from sanitizer).
+
+    Returns:
+        InjectionResult with the highest score found across all params,
+        or a zero-score result if no URLs or no suspicious params.
+    """
+    from urllib.parse import urlparse, parse_qs, unquote_plus
+
+    best = InjectionResult(score=0.0)
+
+    for url in urls:
+        try:
+            parsed = urlparse(url)
+            params = parse_qs(parsed.query, keep_blank_values=False)
+            for param_name, values in params.items():
+                for raw_value in values:
+                    # Decode plus-encoded spaces and percent-encoding
+                    decoded = unquote_plus(raw_value)
+                    result = classify_injection(decoded, use_ml=False)
+                    if result.score > best.score:
+                        # Prefix flags to show which URL param triggered
+                        prefixed_flags = [
+                            f"url_param:{param_name}:{f}" for f in result.flags
+                        ]
+                        best = InjectionResult(
+                            score=result.score,
+                            flags=prefixed_flags,
+                            rule_match=result.rule_match,
+                        )
+        except Exception:
+            continue  # malformed URL — skip silently
+
+    return best

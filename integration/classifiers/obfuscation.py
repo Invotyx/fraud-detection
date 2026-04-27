@@ -108,6 +108,34 @@ def _has_mixed_script(text: str) -> bool:
 
 
 # ---------------------------------------------------------------------------
+# ROT13 detection
+# ---------------------------------------------------------------------------
+
+# ROT13-encoded injection keywords
+_ROT13_INJECTION_WORDS: frozenset[str] = frozenset([
+    "vtagber",      # ignore
+    "sbetrg",       # forget
+    "flfgrz",       # system
+    "wnvyoernx",    # jailbreak
+    "bireeevqr",    # override
+    "vafgehpgvbaf", # instructions
+    "cebzcg",       # prompt
+    "qvfertneq",    # disregard
+    "cergraq",      # pretend
+    "hapbafgenvarq", # unconstrained
+])
+
+
+def _detect_rot13(text: str) -> Tuple[bool, str]:
+    """Detect ROT13-encoded injection keywords in text."""
+    words = re.findall(r"[a-zA-Z]+", text.lower())
+    hits = [w for w in words if w in _ROT13_INJECTION_WORDS]
+    if hits:
+        return True, f"rot13_keywords:{','.join(hits[:5])}"
+    return False, ""
+
+
+# ---------------------------------------------------------------------------
 # Zero-width / invisible characters
 # ---------------------------------------------------------------------------
 
@@ -277,6 +305,12 @@ def detect_obfuscation(text: str) -> ObfuscationResult:
     if has_leet:
         flags.append(leet_flag)
         signal_scores.append(0.70)
+
+    # 11. ROT13-encoded injection keywords
+    has_rot13, rot13_flag = _detect_rot13(text)
+    if has_rot13:
+        flags.append(rot13_flag)
+        signal_scores.append(0.72)
 
     # Aggregate score: max of individual signals, tempered by count
     if not signal_scores:

@@ -34,7 +34,7 @@ from integration.risk_engine.aggregator import (
     aggregate,
 )
 from integration.sanitizer.sanitizer import sanitize
-from integration.classifiers.injection import classify_injection
+from integration.classifiers.injection import classify_injection, scan_for_indirect_injection, classify_injection_from_urls
 from integration.classifiers.session_risk import accumulate_session_injection
 from integration.vector_store.encoder import encode as embed_text
 from integration.vector_store.fraud_patterns import format_rag_context, retrieve_similar_patterns
@@ -268,6 +268,52 @@ async def run_pipeline(
         urls_found=len(sanitized.detected_urls),
         anomalies=sanitized.encoding_anomalies,
     )
+
+    # URL query-parameter injection scan (CVE-2026-24307 / Reprompt pattern):
+    # URLs extracted by the sanitizer are not re-checked for injection payloads
+    # embedded in their query parameters by the guard prefilter above.
+    if sanitized.detected_urls:
+        url_param_result = classify_injection_from_urls(sanitized.detected_urls)
+        if url_param_result.rule_match and url_param_result.score >= settings.guard_prefilter_score_threshold:
+            log_stage("url_param_injection", trace_id=trace_id,
+                      score=url_param_result.score, flags=url_param_result.flags)
+            _block_score = url_param_result.score
+            _url_result = FraudAnalysisResult(
+                prompt_injection=ParameterScore(
+                    score=_block_score, flag=True,
+                    reason="URL query parameter injection detected",
+                ),
+                url_domain_risk=ParameterScore(score=0.7, flag=True,
+                                               reason="Malicious payload in URL parameter"),
+                unified_risk_score=_block_score,
+                decision=Decision.BLOCK,
+                explanation="Prompt injection payload detected in URL query parameter.",
+            )
+            _proc_ms = int((time.monotonic() - t_start) * 1000)
+            await log_request(
+                db,
+                trace_id=trace_id,
+                sanitized_text=sanitized.sanitized_text[:settings.audit_log_content_max_length],
+                raw_text=request.content,
+                classifier_scores={"prompt_injection": _block_score},
+                llm_response=None,
+                unified_risk_score=_block_score,
+                decision=Decision.BLOCK.value,
+                flags={"url_param_injection": True, "flags": url_param_result.flags},
+                hitl_required=False,
+                processing_time_ms=_proc_ms,
+            )
+            return AnalyzeResponse(
+                trace_id=trace_id,
+                result=_url_result,
+                processing_time_ms=_proc_ms,
+                hitl_pending=False,
+                mitigation_notice=(
+                    "A prompt injection payload was detected in a URL query parameter "
+                    f"and blocked. Matched rule(s): {', '.join(url_param_result.flags[:3])}."
+                ),
+                blocked_attack_type="prompt_injection",
+            )
 
     # ------------------------------------------------------------------
     # Step 2: Compute shared text embedding (once, reused across all steps)

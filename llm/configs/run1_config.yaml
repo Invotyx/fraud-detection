@@ -7,6 +7,8 @@ training:
   output_dir: "checkpoints/run1"
   num_train_epochs: 3
   learning_rate: 5.0e-5 # reduced from 2e-4: original LR caused loss collapse to ~0 by step 100
+  # NOTE: loss is still collapsing (0.0016 → 0.0005 by epoch 0.6) even at 5e-5.
+  # If eval shows overfitting, next attempt should try 1e-5 or add early stopping.
 
 experiment:
   wandb_run_name: "run1-resilience"

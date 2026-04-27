@@ -186,9 +186,8 @@ def run_targeted_fix(
     from transformers import (
         AutoModelForCausalLM,
         AutoTokenizer,
-        TrainingArguments,
     )
-    from trl import SFTTrainer
+    from trl import SFTConfig, SFTTrainer
 
     # ---- Distributed context (set by torchrun) ----
     local_rank = int(os.environ.get("LOCAL_RANK", 0))
@@ -246,7 +245,7 @@ def run_targeted_fix(
 
     Path(output_dir).mkdir(parents=True, exist_ok=True)
 
-    training_args = TrainingArguments(
+    training_args = SFTConfig(
         output_dir=output_dir,
         per_device_train_batch_size=2,
         gradient_accumulation_steps=4,    # 4 GPUs × 4 steps = 16 effective
@@ -273,6 +272,10 @@ def run_targeted_fix(
             "sync_module_states": True,
             "activation_checkpointing": True,
         },
+        # SFT-specific args (moved here from SFTTrainer constructor)
+        max_seq_length=2048,
+        dataset_text_field=None,
+        packing=False,
     )
 
     trainer = SFTTrainer(
@@ -280,9 +283,6 @@ def run_targeted_fix(
         tokenizer=tokenizer,
         train_dataset=Dataset.from_list(examples),
         args=training_args,
-        max_seq_length=2048,
-        dataset_text_field=None,
-        packing=False,
     )
 
     # Auto-resume from latest checkpoint if one exists (handles OOM restarts)

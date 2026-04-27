@@ -150,9 +150,8 @@ def train(config: Dict[str, Any], dry_run: bool = False) -> None:
     from transformers import (
         AutoModelForCausalLM,
         AutoTokenizer,
-        TrainingArguments,
     )
-    from trl import SFTTrainer
+    from trl import SFTConfig, SFTTrainer
 
     # ---- Distributed context (set by torchrun) ----
     local_rank = int(os.environ.get("LOCAL_RANK", 0))
@@ -241,7 +240,7 @@ def train(config: Dict[str, Any], dry_run: bool = False) -> None:
         "activation_checkpointing": fsdp_cfg.get("activation_checkpointing", True),
     } if fsdp_strategy else {}
 
-    training_args = TrainingArguments(
+    training_args = SFTConfig(
         output_dir=output_dir,
         per_device_train_batch_size=t_cfg["per_device_train_batch_size"],
         gradient_accumulation_steps=t_cfg["gradient_accumulation_steps"],
@@ -266,6 +265,10 @@ def train(config: Dict[str, Any], dry_run: bool = False) -> None:
         seed=seed,
         fsdp=fsdp_strategy,
         fsdp_config=fsdp_hf_config if fsdp_hf_config else None,
+        # SFT-specific args (moved here from SFTTrainer constructor)
+        max_seq_length=config["model"].get("max_seq_length", 2048),
+        dataset_text_field=None,  # using messages format
+        packing=False,
     )
 
     # ---- SFT Trainer ----
@@ -275,9 +278,6 @@ def train(config: Dict[str, Any], dry_run: bool = False) -> None:
         train_dataset=train_dataset,
         eval_dataset=val_dataset,
         args=training_args,
-        max_seq_length=config["model"].get("max_seq_length", 2048),
-        dataset_text_field=None,  # using messages format
-        packing=False,
     )
 
     # Auto-resume from latest checkpoint if one exists (handles OOM restarts)

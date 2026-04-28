@@ -98,6 +98,7 @@ def _make_example(user_message: str, output_schema: Dict[str, Any]) -> Dict[str,
         "metadata": {
             "decision": output_schema["decision"],
             "unified_risk_score": output_schema["unified_risk_score"],
+            "subset": "",
         },
     }
 
@@ -1356,51 +1357,72 @@ def _rag_context_examples() -> List[Dict[str, Any]]:
 # Dataset assembly
 # ---------------------------------------------------------------------------
 
+def _tag_subset(examples: List[Dict[str, Any]], subset: str) -> List[Dict[str, Any]]:
+    """Stamp every example with its originating subset name."""
+    for ex in examples:
+        ex["metadata"]["subset"] = subset
+    return examples
+
+
 def generate_dataset(examples_per_class: int) -> List[Dict[str, Any]]:
     n = examples_per_class
     dataset: List[Dict[str, Any]] = []
     # Core classes
-    dataset.extend(_benign_examples(n))
-    dataset.extend(_fraud_intent_examples(n))
-    dataset.extend(_prompt_injection_examples(n))
-    dataset.extend(_obfuscation_examples(n))
-    dataset.extend(_exfiltration_examples(n))
-    dataset.extend(_context_deviation_examples(n))
-    dataset.extend(_unauthorized_action_examples(n))
-    dataset.extend(_url_risk_examples(n))
-    dataset.extend(_authority_spoof_examples(n))
+    dataset.extend(_tag_subset(_benign_examples(n), "benign_examples"))
+    dataset.extend(_tag_subset(_fraud_intent_examples(n), "fraud_intent"))
+    dataset.extend(_tag_subset(
+        _prompt_injection_examples(n), "prompt_injection"))
+    dataset.extend(_tag_subset(
+        _obfuscation_examples(n), "obfuscation_evasion"))
+    dataset.extend(_tag_subset(_exfiltration_examples(n), "data_exfiltration"))
+    dataset.extend(_tag_subset(
+        _context_deviation_examples(n), "context_deviation"))
+    dataset.extend(_tag_subset(
+        _unauthorized_action_examples(n), "unauthorized_action"))
+    dataset.extend(_tag_subset(_url_risk_examples(n), "url_domain_risk"))
+    dataset.extend(_tag_subset(
+        _authority_spoof_examples(n), "authority_spoof"))
     # review class: boosted to ~12% overall representation for balanced decision learning
     review_n = max(n, 700)
-    dataset.extend(_review_mix_examples(review_n))
+    dataset.extend(_tag_subset(_review_mix_examples(review_n), "review_mix"))
     # Fixed adversarial resistance (expanded to 10 examples)
-    dataset.extend(_adversarial_resistance_examples())
+    dataset.extend(_tag_subset(
+        _adversarial_resistance_examples(), "adversarial_resistance"))
     # RAG context examples
-    dataset.extend(_rag_context_examples())
+    dataset.extend(_tag_subset(_rag_context_examples(), "rag_context"))
     # LLM-2: adversarial suffix examples
     adv_suffix_n = max(n // 5, 80)
-    dataset.extend(_adversarial_suffix_examples(adv_suffix_n))
+    dataset.extend(_tag_subset(_adversarial_suffix_examples(
+        adv_suffix_n), "adversarial_suffix"))
     # LLM-3: payload splitting examples
     payload_split_n = max(n // 5, 80)
-    dataset.extend(_payload_split_examples(payload_split_n))
+    dataset.extend(_tag_subset(_payload_split_examples(
+        payload_split_n), "payload_splitting"))
     # ---- March 2026 additions ----
     # Indirect injection via visually hidden HTML (EchoLeak, webpage poisoning)
     indirect_n = max(n // 4, 120)
-    dataset.extend(_indirect_html_injection_examples(indirect_n))
+    dataset.extend(_tag_subset(_indirect_html_injection_examples(
+        indirect_n), "indirect_html_injection"))
     # Language-switching obfuscation (Chinese/Russian/Arabic injection)
     lang_n = max(n // 5, 100)
-    dataset.extend(_language_switching_examples(lang_n))
+    dataset.extend(_tag_subset(
+        _language_switching_examples(lang_n), "language_switching"))
     # Scrambled words, synonym substitution, ROT13, markdown hiding
     obf_variant_n = max(n // 5, 100)
-    dataset.extend(_obfuscation_variant_examples(obf_variant_n))
+    dataset.extend(_tag_subset(_obfuscation_variant_examples(
+        obf_variant_n), "obfuscation_variant"))
     # Fake task completion + delimiter confusion (Examples 3 & 4 from article)
     fake_task_n = max(n // 5, 100)
-    dataset.extend(_fake_task_completion_examples(fake_task_n))
+    dataset.extend(_tag_subset(_fake_task_completion_examples(
+        fake_task_n), "fake_task_completion"))
     # Memory/context poisoning + conversation history injection
     memory_n = max(n // 5, 100)
-    dataset.extend(_memory_context_poisoning_examples(memory_n))
+    dataset.extend(_tag_subset(
+        _memory_context_poisoning_examples(memory_n), "memory_poisoning"))
     # URL-parameter injection (Reprompt / CVE-2026-24307)
     url_param_n = max(n // 5, 80)
-    dataset.extend(_url_param_injection_examples(url_param_n))
+    dataset.extend(_tag_subset(_url_param_injection_examples(
+        url_param_n), "url_param_injection"))
     random.shuffle(dataset)
     return dataset
 

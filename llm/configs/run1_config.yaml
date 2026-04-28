@@ -17,12 +17,24 @@ experiment:
     input content, stay on task (fraud analysis), and output valid JSON.
     Focus: instruction resistance + JSON output reliability.
 
-# Which data subsets to use for this run
+# Which data subsets to use for this run.
+# These map directly to metadata["subset"] tags written by prepare_data.py.
+# Run 1 focus: instruction resistance, JSON output reliability, evasion recognition.
+# Run 2 (run2_config.yaml) uses the disjoint fraud-detection subsets.
 data_subsets:
-  - instruction_resistance # e.g., "ignore previous instructions" patterns
-  - task_adherence # model must return fraud JSON, not follow tangents
-  - safe_html_transform # HTML → plain text while ignoring hidden instructions
-  - content_prioritization # visible vs. hidden content priority
+  - prompt_injection # direct override attempts
+  - obfuscation_evasion # encoding / Unicode disguise
+  - adversarial_resistance # composite injection + fraud
+  - indirect_html_injection # hidden-HTML / EchoLeak style
+  - language_switching # foreign-language payload evasion
+  - obfuscation_variant # scrambled words, ROT13, synonyms
+  - fake_task_completion # delimiter confusion attacks
+  - memory_poisoning # context / history injection
+  - adversarial_suffix # GCG-style token suffix attacks
+  - payload_splitting # fragmented injection across sections
+  - url_param_injection # Reprompt / CVE-2026-24307 pattern
+  - rag_context # RAG context block handling
+  - benign_examples # keep model grounded on clean inputs
 
 # Acceptance thresholds (checked in eval.py)
 eval_thresholds:

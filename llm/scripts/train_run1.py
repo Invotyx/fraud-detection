@@ -72,36 +72,17 @@ def _filter_subsets(
     dataset: List[Dict[str, Any]],
     subsets: Optional[List[str]],
 ) -> List[Dict[str, Any]]:
-    """Filter to specific data subsets for this training run."""
+    """Filter to specific data subsets for this training run.
+
+    Each example must have metadata['subset'] set by prepare_data.py.
+    """
     if not subsets:
         return dataset
 
-    _SUBSET_DECISIONS = {
-        # all injection/manipulation examples
-        "instruction_resistance": ["block"],
-        "task_adherence": ["allow"],
-        "safe_html_transform": ["allow"],
-        "content_prioritization": ["allow", "review"],
-        "fraud_intent": ["block", "review"],
-        "prompt_injection": ["block"],
-        "context_deviation": ["review", "block"],
-        "data_exfiltration": ["block"],
-        "obfuscation_evasion": ["block"],
-        "unauthorized_action": ["block"],
-        "url_domain_risk": ["block", "review"],
-        "benign_examples": ["allow"],
-    }
-
-    allowed_decisions = set()
-    for subset in subsets:
-        allowed_decisions.update(_SUBSET_DECISIONS.get(subset, []))
-
-    if not allowed_decisions:
-        return dataset
-
+    allowed = set(subsets)
     return [
         ex for ex in dataset
-        if ex.get("metadata", {}).get("decision") in allowed_decisions
+        if ex.get("metadata", {}).get("subset") in allowed
     ]
 
 

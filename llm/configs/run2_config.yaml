@@ -14,14 +14,17 @@ experiment:
     Train the model to accurately detect and explain all 7 fraud parameters.
     Focus: per-parameter F1 ≥ 0.80, coherent explanations, structured output.
 
+# Run 2 focus: accurate detection of all 7 fraud parameters.
+# These subsets are disjoint from run1_config.yaml (except benign_examples).
+# Each maps to metadata["subset"] tags written by prepare_data.py.
 data_subsets:
   - fraud_intent # social engineering, phishing language
-  - prompt_injection # assist-level injection recognition
   - context_deviation # off-topic request recognition
   - data_exfiltration # credential/PII leak patterns
-  - obfuscation_evasion # encoding tricks, homoglyphs
-  - unauthorized_action # restricted tool intent
+  - unauthorized_action # restricted tool / MCP intent
   - url_domain_risk # reasoning about suspicious URLs/domains
+  - authority_spoof # bank/government impersonation
+  - review_mix # borderline cases → human review decision
   - benign_examples # keep false positives low
 
 eval_thresholds:

@@ -168,8 +168,21 @@ def evaluate(
     latencies: List[float] = []
 
     for item in test_data:
-        user_text = item.get("user", item.get("text", ""))
-        ref_output = item.get("assistant", item.get("label", {}))
+        # Support both flat {"user": ..., "assistant": ...} and
+        # messages-list {"messages": [{role, content}, ...]} formats.
+        if "messages" in item:
+            msgs = item["messages"]
+            user_text = next(
+                (m["content"] for m in msgs if m.get("role") == "user"), ""
+            )
+            ref_raw = next(
+                (m["content"] for m in reversed(msgs) if m.get("role") == "assistant"),
+                {},
+            )
+        else:
+            user_text = item.get("user", item.get("text", ""))
+            ref_raw = item.get("assistant", item.get("label", {}))
+        ref_output = ref_raw
         if isinstance(ref_output, str):
             try:
                 ref_output = json.loads(ref_output)

@@ -140,7 +140,8 @@ pip install -q \
     scikit-learn \
     rouge-score \
     bert-score \
-    nltk
+    nltk \
+    vllm
 
 # ---------------------------------------------------------------------------
 # 7. Experiment tracking

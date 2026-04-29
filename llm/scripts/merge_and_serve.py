@@ -115,42 +115,27 @@ def merge_lora(checkpoint: str, merged_dir: str) -> None:
 
 def serve_vllm(merged_dir: str, port: int = 8001) -> subprocess.Popen:
     """Start vLLM OpenAI-compatible server. Returns the process handle."""
-    # Use all 4 T4 GPUs via tensor parallelism.
-    # 8B fp16 = ~16 GB total; split 4 ways = ~4 GB per GPU, leaving ~10 GB
-    # per GPU for KV cache. Single-GPU would OOM (14.58 GB < 16 GB model).
-    import torch
-    n_gpus = torch.cuda.device_count() or 1
-    # tensor_parallel_size must divide the number of attention heads (32 for
-    # LLaMA-3.1-8B), so clamp to 1/2/4/8.
-    for tp in [8, 4, 2, 1]:
-        if n_gpus >= tp:
-            tensor_parallel_size = tp
-            break
-    else:
-        tensor_parallel_size = 1
-
+    # Single-GPU + int8 quantization is the only viable path on g4dn.xlarge
+    # T4 GPUs (14.58 GB each, CUDA 12.2):
+    #   - fp16 single-GPU: OOM (8B fp16 = ~16 GB > 14.58 GB)
+    #   - tensor-parallel multi-GPU: NCCL 2.28.9 requires CUDA ≥12.4; fails
+    #     with "unhandled cuda error" on ncclCommInitRank even with P2P disabled
+    #   - int8 bitsandbytes single-GPU: ~8 GB model → fits with ~6 GB for KV cache
+    # vLLM quantizes on the fly from the clean fp16 safetensors checkpoint.
     cmd = [
         sys.executable, "-m", "vllm.entrypoints.openai.api_server",
         "--model", merged_dir,
         "--port", str(port),
         "--host", "0.0.0.0",
-        "--tensor-parallel-size", str(tensor_parallel_size),
+        "--tensor-parallel-size", "1",
+        "--quantization", "bitsandbytes",
+        "--load-format", "bitsandbytes",
         "--max-model-len", "4096",
         "--dtype", "float16",
         "--gpu-memory-utilization", "0.95",
     ]
-
-    # T4 GPUs on g4dn are PCIe-only (no NVLink). NCCL P2P over PCIe is
-    # unreliable and causes "unhandled cuda error" on ncclCommInitRank.
-    # Disabling P2P forces NCCL to use shared-memory / network transport
-    # which works on all topologies.
-    env = {**__import__("os").environ,
-           "NCCL_P2P_DISABLE": "1",
-           "NCCL_SHM_DISABLE": "0"}
-
-    print(
-        f"Starting vLLM server on :{port} (tensor_parallel_size={tensor_parallel_size}, NCCL_P2P_DISABLE=1)")
-    proc = subprocess.Popen(cmd, env=env)
+    print(f"Starting vLLM server on :{port} (single-GPU, int8 bitsandbytes)")
+    proc = subprocess.Popen(cmd)
     return proc
 
 

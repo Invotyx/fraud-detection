@@ -115,13 +115,15 @@ def merge_lora(checkpoint: str, merged_dir: str) -> None:
 
 def serve_vllm(merged_dir: str, port: int = 8001) -> subprocess.Popen:
     """Start vLLM OpenAI-compatible server. Returns the process handle."""
-    # Single-GPU + int8 quantization is the only viable path on g4dn.xlarge
+    # Single-GPU + 4-bit bitsandbytes is the only viable path on g4dn.xlarge
     # T4 GPUs (14.58 GB each, CUDA 12.2):
     #   - fp16 single-GPU: OOM (8B fp16 = ~16 GB > 14.58 GB)
     #   - tensor-parallel multi-GPU: NCCL 2.28.9 requires CUDA ≥12.4; fails
-    #     with "unhandled cuda error" on ncclCommInitRank even with P2P disabled
-    #   - int8 bitsandbytes single-GPU: ~8 GB model → fits with ~6 GB for KV cache
-    # vLLM quantizes on the fly from the clean fp16 safetensors checkpoint.
+    #   - 4-bit bitsandbytes single-GPU: ~5 GB model → fits with KV cache
+    # --enforce-eager: skip cudagraph capture which OOMs (capture tries to
+    #   dequantize a 4-bit layer needing 112 MB with only 26 MB free after the
+    #   KV cache is allocated at 0.95 utilization).
+    # --gpu-memory-utilization 0.85: leaves ~2 GB headroom for activation memory.
     cmd = [
         sys.executable, "-m", "vllm.entrypoints.openai.api_server",
         "--model", merged_dir,
@@ -132,7 +134,8 @@ def serve_vllm(merged_dir: str, port: int = 8001) -> subprocess.Popen:
         "--load-format", "bitsandbytes",
         "--max-model-len", "4096",
         "--dtype", "float16",
-        "--gpu-memory-utilization", "0.95",
+        "--gpu-memory-utilization", "0.85",
+        "--enforce-eager",
     ]
     print(f"Starting vLLM server on :{port} (single-GPU, int8 bitsandbytes)")
     proc = subprocess.Popen(cmd)

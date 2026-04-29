@@ -53,7 +53,7 @@ def _load_system_prompt() -> str:
 
 
 def _call_server(
-    server_url: str, user_text: str, system_prompt: str, timeout: float = 10.0
+    server_url: str, user_text: str, system_prompt: str, timeout: float = 120.0
 ) -> Optional[str]:
     import urllib.request
 
@@ -301,6 +301,8 @@ def _parse_args() -> argparse.Namespace:
     p.add_argument("--test-data", default="llm/data/test.jsonl")
     p.add_argument("--output", default=None,
                    help="Save eval results JSON to this path")
+    p.add_argument("--timeout", type=float, default=120.0,
+                   help="Per-request HTTP timeout in seconds (default: 120)")
     p.add_argument("--dry-run", action="store_true",
                    help="Use stub responses; skip model loading")
     return p.parse_args()
@@ -353,7 +355,7 @@ def main() -> None:
 
         if args.server_url:
             def infer_fn(text: str, prompt: str) -> Optional[str]:
-                return _call_server(args.server_url, text, prompt)
+                return _call_server(args.server_url, text, prompt, timeout=args.timeout)
         elif args.model_dir:
             import torch
             from transformers import AutoModelForCausalLM, AutoTokenizer, pipeline

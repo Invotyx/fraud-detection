@@ -1156,7 +1156,7 @@
 
         const btn = document.getElementById("analyzeBtn");
         btn.disabled = true;
-        btn.innerHTML = '<span class="spinner"></span>Analyzing…';
+        btn.innerHTML = '<span class="spinner"></span>Analyzing… 0s';
 
         const body = {
           content,
@@ -1166,12 +1166,17 @@
         };
 
         const start = Date.now();
+        const _elapsedTimer = setInterval(() => {
+          const s = Math.floor((Date.now() - start) / 1000);
+          btn.innerHTML = `<span class="spinner"></span>Analyzing… ${s}s`;
+        }, 1000);
+
         try {
           const res = await fetch(apiUrl("/analyze"), {
             method: "POST",
             headers: apiHeaders(),
             body: JSON.stringify(body),
-            signal: AbortSignal.timeout(30000),
+            signal: AbortSignal.timeout(150000),
           });
 
           let data = null;
@@ -1218,6 +1223,7 @@
           );
           switchTab("result");
         } finally {
+          clearInterval(_elapsedTimer);
           btn.disabled = false;
           btn.textContent = "Analyze";
         }

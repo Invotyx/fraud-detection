@@ -38,6 +38,7 @@ from integration.classifiers.injection import classify_injection, scan_for_indir
 from integration.classifiers.session_risk import accumulate_session_injection
 from integration.vector_store.encoder import encode as embed_text
 from integration.vector_store.fraud_patterns import format_rag_context, retrieve_similar_patterns
+from integration.vector_store.store import ensure_vector_codec
 
 # ---------------------------------------------------------------------------
 # System prompt loader
@@ -330,8 +331,10 @@ async def run_pipeline(
     if settings.rag_enabled and text_embedding is not None:
         try:
             raw_conn = await db.get_raw_connection()
+            rag_driver_conn = raw_conn.driver_connection
+            await ensure_vector_codec(rag_driver_conn)
             similar_patterns = await retrieve_similar_patterns(
-                raw_conn.driver_connection, text_embedding
+                rag_driver_conn, text_embedding
             )
             if similar_patterns:
                 rag_context = format_rag_context(similar_patterns)
@@ -348,9 +351,11 @@ async def run_pipeline(
     # Steps 5a / 5b / 5c  (parallel)
     # ------------------------------------------------------------------
     raw_conn_obj = None
+    driver_conn = None
     try:
         raw_conn_obj = await db.get_raw_connection()
         driver_conn = raw_conn_obj.driver_connection
+        await ensure_vector_codec(driver_conn)
     except Exception:
         driver_conn = None
 

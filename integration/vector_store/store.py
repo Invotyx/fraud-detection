@@ -40,6 +40,25 @@ def _get_turn_history_max() -> int:
 
 
 # ---------------------------------------------------------------------------
+# Codec helper
+# ---------------------------------------------------------------------------
+
+async def ensure_vector_codec(conn: Any) -> None:
+    """
+    Register the pgvector asyncpg codec on *conn* if not already registered.
+
+    Safe to call multiple times (asyncpg overwrites with the same codec).
+    Call this once per raw asyncpg connection before any vector I/O to handle
+    connections that were created after the initial pool warm-up.
+    """
+    try:
+        from pgvector.asyncpg import register_vector  # type: ignore
+        await register_vector(conn)
+    except Exception:
+        pass
+
+
+# ---------------------------------------------------------------------------
 # Initialisation
 # ---------------------------------------------------------------------------
 
@@ -124,8 +143,7 @@ async def upsert_scope_embedding(
         """,
         session_id,
         content_hash,
-        "[" + ",".join(map(str, np.asarray(embedding,
-                       dtype=np.float32).tolist())) + "]",
+        np.asarray(embedding, dtype=np.float32).tolist(),
         expires_at,
     )
 
@@ -197,8 +215,7 @@ async def append_turn_embedding(
         session_id,
         next_turn,
         content_hash,
-        "[" + ",".join(map(str, np.asarray(embedding,
-                       dtype=np.float32).tolist())) + "]",
+        np.asarray(embedding, dtype=np.float32).tolist(),
         expires_at,
     )
 
@@ -274,8 +291,7 @@ async def search_fraud_patterns(
         ORDER BY embedding <=> $1
         LIMIT $2
         """,
-        "[" + ",".join(map(str, np.asarray(embedding,
-                       dtype=np.float32).tolist())) + "]",
+        np.asarray(embedding, dtype=np.float32).tolist(),
         top_k,
         min_similarity,
     )
@@ -324,8 +340,7 @@ async def find_similar_recent_sessions(
         ORDER BY embedding <=> $1
         LIMIT $3
         """,
-        "[" + ",".join(map(str, np.asarray(embedding,
-                       dtype=np.float32).tolist())) + "]",
+        np.asarray(embedding, dtype=np.float32).tolist(),
         current_session_id,
         top_k,
         min_similarity,

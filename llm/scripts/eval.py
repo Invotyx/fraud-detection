@@ -23,6 +23,8 @@ import argparse
 import json
 import sys
 import time
+import threading
+from concurrent.futures import ThreadPoolExecutor
 from pathlib import Path
 from typing import Any, Dict, List, Optional, Tuple
 
@@ -87,6 +89,77 @@ def _call_local(pipe, user_text: str, system_prompt: str) -> Optional[str]:
         return result[0]["generated_text"][-1]["content"]
     except Exception:
         return None
+
+
+# ---------------------------------------------------------------------------
+# Per-item processing helper
+# ---------------------------------------------------------------------------
+
+def _process_one_item(
+    item: Dict[str, Any],
+    infer_fn,
+    system_prompt: str,
+) -> Tuple[Dict[str, float], Dict[str, Any], float, bool]:
+    """Process one test sample. Returns (pred_scores, ref_scores, latency_ms, parse_failed)."""
+    if "messages" in item:
+        msgs = item["messages"]
+        user_text = next(
+            (m["content"] for m in msgs if m.get("role") == "user"), ""
+        )
+        ref_raw = next(
+            (m["content"]
+             for m in reversed(msgs) if m.get("role") == "assistant"),
+            {},
+        )
+    else:
+        user_text = item.get("user", item.get("text", ""))
+        ref_raw = item.get("assistant", item.get("label", {}))
+
+    ref_output = ref_raw
+    if isinstance(ref_output, str):
+        try:
+            ref_output = json.loads(ref_output)
+        except json.JSONDecodeError:
+            ref_output = {}
+
+    t0 = time.perf_counter()
+    raw = infer_fn(user_text, system_prompt)
+    latency_ms = (time.perf_counter() - t0) * 1000
+
+    parse_failed = False
+    pred: Dict[str, Any] = {}
+    if raw:
+        start = raw.find("{")
+        end = raw.rfind("}") + 1
+        if start >= 0 and end > start:
+            try:
+                parsed = json.loads(raw[start:end])
+                pred = parsed.get("parameters", parsed)
+            except json.JSONDecodeError:
+                parse_failed = True
+        else:
+            parse_failed = True
+    else:
+        parse_failed = True
+
+    pred_scores: Dict[str, float] = {}
+    for param in PARAMETERS:
+        if isinstance(pred.get(param), dict):
+            pred_scores[param] = float(pred[param].get("score", 0.0))
+        else:
+            pred_scores[param] = float(pred.get(param, 0.0))
+
+    ref_params = ref_output.get("parameters", ref_output)
+    ref_scores: Dict[str, Any] = {
+        "label_decision": ref_output.get("decision", "allow")
+    }
+    for param in PARAMETERS:
+        if isinstance(ref_params.get(param), dict):
+            ref_scores[param] = float(ref_params[param].get("score", 0.0))
+        else:
+            ref_scores[param] = float(ref_params.get(param, 0.0))
+
+    return pred_scores, ref_scores, latency_ms, parse_failed
 
 
 # ---------------------------------------------------------------------------
@@ -161,76 +234,29 @@ def evaluate(
     test_data: List[Dict[str, Any]],
     infer_fn,
     system_prompt: str,
+    workers: int = 1,
 ) -> Dict[str, Any]:
-    predictions: List[Dict[str, Any]] = []
-    references: List[Dict[str, Any]] = []
-    json_parse_failures = 0
-    latencies: List[float] = []
-
-    for item in test_data:
-        # Support both flat {"user": ..., "assistant": ...} and
-        # messages-list {"messages": [{role, content}, ...]} formats.
-        if "messages" in item:
-            msgs = item["messages"]
-            user_text = next(
-                (m["content"] for m in msgs if m.get("role") == "user"), ""
-            )
-            ref_raw = next(
-                (m["content"] for m in reversed(msgs) if m.get("role") == "assistant"),
-                {},
-            )
-        else:
-            user_text = item.get("user", item.get("text", ""))
-            ref_raw = item.get("assistant", item.get("label", {}))
-        ref_output = ref_raw
-        if isinstance(ref_output, str):
-            try:
-                ref_output = json.loads(ref_output)
-            except json.JSONDecodeError:
-                ref_output = {}
-
-        t0 = time.perf_counter()
-        raw = infer_fn(user_text, system_prompt)
-        latencies.append((time.perf_counter() - t0) * 1000)
-
-        # Extract JSON from response (model may add prose)
-        pred = {}
-        if raw:
-            start = raw.find("{")
-            end = raw.rfind("}") + 1
-            if start >= 0 and end > start:
-                try:
-                    parsed = json.loads(raw[start:end])
-                    pred = parsed.get("parameters", parsed)
-                except json.JSONDecodeError:
-                    json_parse_failures += 1
-            else:
-                json_parse_failures += 1
-        else:
-            json_parse_failures += 1
-
-        # Build flat param score dict for metrics
-        pred_scores: Dict[str, float] = {}
-        for param in PARAMETERS:
-            if isinstance(pred.get(param), dict):
-                pred_scores[param] = float(pred[param].get("score", 0.0))
-            else:
-                pred_scores[param] = float(pred.get(param, 0.0))
-
-        # Reference scores
-        ref_params = ref_output.get("parameters", ref_output)
-        ref_scores: Dict[str, Any] = {
-            "label_decision": ref_output.get("decision", "allow")}
-        for param in PARAMETERS:
-            if isinstance(ref_params.get(param), dict):
-                ref_scores[param] = float(ref_params[param].get("score", 0.0))
-            else:
-                ref_scores[param] = float(ref_params.get(param, 0.0))
-
-        predictions.append(pred_scores)
-        references.append(ref_scores)
-
     total = len(test_data)
+    done_count = 0
+    _lock = threading.Lock()
+
+    def _run_one(item: Dict[str, Any]):
+        nonlocal done_count
+        result = _process_one_item(item, infer_fn, system_prompt)
+        with _lock:
+            done_count += 1
+            if done_count % 50 == 0 or done_count == total:
+                print(f"  Progress: {done_count}/{total}", flush=True)
+        return result
+
+    with ThreadPoolExecutor(max_workers=workers) as pool:
+        all_results = list(pool.map(_run_one, test_data))
+
+    predictions: List[Dict[str, float]] = [r[0] for r in all_results]
+    references: List[Dict[str, Any]] = [r[1] for r in all_results]
+    latencies: List[float] = [r[2] for r in all_results]
+    json_parse_failures = sum(1 for r in all_results if r[3])
+
     json_parse_rate = 1.0 - (json_parse_failures / total) if total else 0.0
 
     metrics = _compute_metrics(predictions, references)
@@ -238,11 +264,11 @@ def evaluate(
     metrics["json_parse_failures"] = json_parse_failures
     metrics["total_samples"] = total
 
-    latencies.sort()
+    latencies_sorted = sorted(latencies)
 
     def _pct(pct: float) -> float:
-        idx = int(len(latencies) * pct / 100)
-        return latencies[min(idx, len(latencies) - 1)]
+        idx = int(len(latencies_sorted) * pct / 100)
+        return latencies_sorted[min(idx, len(latencies_sorted) - 1)]
 
     metrics["latency_ms"] = {
         "p50": _pct(50),
@@ -316,6 +342,8 @@ def _parse_args() -> argparse.Namespace:
                    help="Save eval results JSON to this path")
     p.add_argument("--timeout", type=float, default=120.0,
                    help="Per-request HTTP timeout in seconds (default: 120)")
+    p.add_argument("--workers", type=int, default=4,
+                   help="Parallel inference workers — vLLM continuous batching handles concurrent requests (default: 4)")
     p.add_argument("--dry-run", action="store_true",
                    help="Use stub responses; skip model loading")
     return p.parse_args()
@@ -383,12 +411,16 @@ def main() -> None:
 
             def infer_fn(text: str, prompt: str) -> Optional[str]:
                 return _call_local(pipe, text, prompt)
+            # HF pipeline is not thread-safe; force serial execution
+            args.workers = 1
         else:
             print("ERROR: provide --server-url, --model-dir, or --dry-run")
             sys.exit(1)
 
-    print(f"Evaluating {len(test_data)} samples...")
-    metrics = evaluate(test_data, infer_fn, system_prompt)
+    print(
+        f"Evaluating {len(test_data)} samples with {args.workers} workers...")
+    metrics = evaluate(test_data, infer_fn, system_prompt,
+                       workers=args.workers)
     sla_pass = print_report(metrics)
 
     if args.output:

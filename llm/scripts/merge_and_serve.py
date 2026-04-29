@@ -165,12 +165,29 @@ def serve_hf(merged_dir: str, port: int = 8001) -> None:
             content_len = int(self.headers.get("Content-Length", 0))
             body = json.loads(self.rfile.read(content_len))
             messages = body.get("messages", [])
-            prompt = "\n".join(
-                f"{m['role']}: {m['content']}" for m in messages)
-            result = pipe(prompt, max_new_tokens=512, do_sample=False)[
-                0]["generated_text"]
-            # Extract only the new tokens
-            new_text = result[len(prompt):].strip()
+            max_new_tokens = int(body.get("max_tokens", 512))
+
+            # Use chat template so the model produces structured JSON output.
+            # Falls back to plain concatenation if the tokenizer has no template.
+            try:
+                formatted = tokenizer.apply_chat_template(
+                    messages,
+                    tokenize=False,
+                    add_generation_prompt=True,
+                )
+            except Exception:
+                formatted = "\n".join(
+                    f"{m['role']}: {m['content']}" for m in messages
+                )
+
+            result = pipe(
+                formatted,
+                max_new_tokens=max_new_tokens,
+                do_sample=False,
+                return_full_text=False,
+            )[0]["generated_text"]
+
+            new_text = result.strip()
             resp = {
                 "choices": [{"message": {"role": "assistant", "content": new_text}}]
             }

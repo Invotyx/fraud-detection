@@ -33,7 +33,7 @@ BASE_MODEL_ID="${BASE_MODEL_ID:-meta-llama/Meta-Llama-3.1-8B-Instruct}"
 DATASET_COUNT="${DATASET_COUNT:-600}"
 LLM_SERVER_PORT="${LLM_SERVER_PORT:-8001}"
 SERVER_URL="${LLM_SERVER_URL:-http://localhost:${LLM_SERVER_PORT}}"
-SERVER_STARTUP_WAIT_SECONDS="${SERVER_STARTUP_WAIT_SECONDS:-60}"
+SERVER_STARTUP_WAIT_SECONDS="${SERVER_STARTUP_WAIT_SECONDS:-300}"
 PROMPT_TEST_STRICT="${PROMPT_TEST_STRICT:-0}"
 export PYTORCH_CUDA_ALLOC_CONF="${PYTORCH_CUDA_ALLOC_CONF:-expandable_segments:True}"
 
@@ -55,6 +55,25 @@ done_step() {
 
 warn_step() {
     echo -e "${CYAN}[WARN] $1${NC}"
+}
+
+# Poll server health endpoint until ready or timeout
+wait_for_server() {
+    local url="$1"
+    local timeout="${2:-300}"
+    local interval=5
+    local elapsed=0
+    echo "Waiting for server at ${url}/health (timeout ${timeout}s)..."
+    while [[ ${elapsed} -lt ${timeout} ]]; do
+        if curl -sf "${url}/health" >/dev/null 2>&1; then
+            echo "Server is ready (${elapsed}s elapsed)"
+            return 0
+        fi
+        sleep ${interval}
+        elapsed=$((elapsed + interval))
+    done
+    echo "ERROR: Server did not become ready within ${timeout}s"
+    return 1
 }
 
 cd "${PROJECT_ROOT}"
@@ -178,8 +197,8 @@ else
     touch "${STATE_DIR}/phase6.done"
 fi
 
-echo "Waiting ${SERVER_STARTUP_WAIT_SECONDS}s for the server to become ready..."
-sleep "${SERVER_STARTUP_WAIT_SECONDS}"
+echo "Waiting for vLLM server to become ready (timeout ${SERVER_STARTUP_WAIT_SECONDS}s)..."
+wait_for_server "${SERVER_URL}" "${SERVER_STARTUP_WAIT_SECONDS}"
 done_step "merge_and_serve.py (server running in background)"
 
 # =============================================================================

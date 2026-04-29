@@ -136,6 +136,7 @@ def serve_vllm(merged_dir: str, port: int = 8001) -> subprocess.Popen:
         "--dtype", "float16",
         "--gpu-memory-utilization", "0.85",
         "--enforce-eager",
+        "--served-model-name", "fraud-detector",
     ]
     print(f"Starting vLLM server on :{port} (single-GPU, int8 bitsandbytes)")
     proc = subprocess.Popen(cmd)

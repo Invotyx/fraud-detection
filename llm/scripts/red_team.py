@@ -258,6 +258,8 @@ def _call_server(server_url: str, prompt: str, system_prompt: str) -> Optional[s
             {"role": "system", "content": system_prompt},
             {"role": "user", "content": prompt},
         ],
+        "max_tokens": 512,
+        "temperature": 0.0,
     }).encode()
     req = urllib.request.Request(
         f"{server_url}/v1/chat/completions",
@@ -265,7 +267,7 @@ def _call_server(server_url: str, prompt: str, system_prompt: str) -> Optional[s
         headers={"Content-Type": "application/json"},
     )
     try:
-        with urllib.request.urlopen(req, timeout=15) as resp:
+        with urllib.request.urlopen(req, timeout=120) as resp:
             data = json.loads(resp.read())
             return data["choices"][0]["message"]["content"]
     except Exception as exc:

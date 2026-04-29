@@ -182,6 +182,20 @@ fi
 # Phase 6 — Merge LoRA and Serve
 # =============================================================================
 step "Phase 6: Merge LoRA Adapter and Start Inference Server"
+
+# Kill any stale vLLM process so it releases GPU memory before we start fresh.
+if pgrep -f "vllm.entrypoints.openai.api_server" >/dev/null 2>&1; then
+    warn_step "Killing existing vLLM process to free GPU memory..."
+    pkill -TERM -f "vllm.entrypoints.openai.api_server" || true
+    # Wait up to 15s for the process to exit and CUDA context to be released
+    for _i in $(seq 1 15); do
+        pgrep -f "vllm.entrypoints.openai.api_server" >/dev/null 2>&1 || break
+        sleep 1
+    done
+    pkill -KILL -f "vllm.entrypoints.openai.api_server" 2>/dev/null || true
+    sleep 3  # allow CUDA driver to reclaim memory
+fi
+
 if [[ -f "${STATE_DIR}/phase6.done" ]]; then
     warn_step "Phase 6 merge already completed — starting server against existing merged dir"
     python llm/scripts/merge_and_serve.py \

@@ -115,16 +115,32 @@ def merge_lora(checkpoint: str, merged_dir: str) -> None:
 
 def serve_vllm(merged_dir: str, port: int = 8001) -> subprocess.Popen:
     """Start vLLM OpenAI-compatible server. Returns the process handle."""
+    # Use all 4 T4 GPUs via tensor parallelism.
+    # 8B fp16 = ~16 GB total; split 4 ways = ~4 GB per GPU, leaving ~10 GB
+    # per GPU for KV cache. Single-GPU would OOM (14.58 GB < 16 GB model).
+    import torch
+    n_gpus = torch.cuda.device_count() or 1
+    # tensor_parallel_size must divide the number of attention heads (32 for
+    # LLaMA-3.1-8B), so clamp to 1/2/4/8.
+    for tp in [8, 4, 2, 1]:
+        if n_gpus >= tp:
+            tensor_parallel_size = tp
+            break
+    else:
+        tensor_parallel_size = 1
+
     cmd = [
         sys.executable, "-m", "vllm.entrypoints.openai.api_server",
         "--model", merged_dir,
         "--port", str(port),
         "--host", "0.0.0.0",
-        "--tensor-parallel-size", "1",
+        "--tensor-parallel-size", str(tensor_parallel_size),
         "--max-model-len", "4096",
         "--dtype", "float16",
+        "--gpu-memory-utilization", "0.95",
     ]
-    print(f"Starting vLLM server on :{port}")
+    print(
+        f"Starting vLLM server on :{port} (tensor_parallel_size={tensor_parallel_size})")
     proc = subprocess.Popen(cmd)
     return proc
 

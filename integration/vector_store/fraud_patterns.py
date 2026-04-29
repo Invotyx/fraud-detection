@@ -81,7 +81,8 @@ async def seed_knowledge_base(conn: Any, encoder: Any) -> int:
             """,
             p["text"].strip(),
             p["type"],
-            np.array(emb, dtype=np.float32),
+            "[" + ",".join(map(str, np.asarray(emb,
+                           dtype=np.float32).tolist())) + "]",
             float(p.get("severity", 0.8)),
         )
         count += 1

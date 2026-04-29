@@ -124,7 +124,8 @@ async def upsert_scope_embedding(
         """,
         session_id,
         content_hash,
-        np.array(embedding, dtype=np.float32),
+        "[" + ",".join(map(str, np.asarray(embedding,
+                       dtype=np.float32).tolist())) + "]",
         expires_at,
     )
 
@@ -147,7 +148,10 @@ async def get_scope_embedding(
     )
     if row is None:
         return None
-    return list(row["embedding"]), (row["content_hash"] or "")
+    emb = row["embedding"]
+    if isinstance(emb, str):
+        emb = [float(x) for x in emb.strip("[]").split(",")]
+    return list(emb), (row["content_hash"] or "")
 
 
 # ---------------------------------------------------------------------------
@@ -193,7 +197,8 @@ async def append_turn_embedding(
         session_id,
         next_turn,
         content_hash,
-        np.array(embedding, dtype=np.float32),
+        "[" + ",".join(map(str, np.asarray(embedding,
+                       dtype=np.float32).tolist())) + "]",
         expires_at,
     )
 
@@ -234,7 +239,13 @@ async def get_turn_history(
         session_id,
         limit,
     )
-    return [list(row["embedding"]) for row in rows]
+    result = []
+    for row in rows:
+        emb = row["embedding"]
+        if isinstance(emb, str):
+            emb = [float(x) for x in emb.strip("[]").split(",")]
+        result.append(list(emb))
+    return result
 
 
 # ---------------------------------------------------------------------------
@@ -263,7 +274,8 @@ async def search_fraud_patterns(
         ORDER BY embedding <=> $1
         LIMIT $2
         """,
-        np.array(embedding, dtype=np.float32),
+        "[" + ",".join(map(str, np.asarray(embedding,
+                       dtype=np.float32).tolist())) + "]",
         top_k,
         min_similarity,
     )
@@ -312,7 +324,8 @@ async def find_similar_recent_sessions(
         ORDER BY embedding <=> $1
         LIMIT $3
         """,
-        np.array(embedding, dtype=np.float32),
+        "[" + ",".join(map(str, np.asarray(embedding,
+                       dtype=np.float32).tolist())) + "]",
         current_session_id,
         top_k,
         min_similarity,

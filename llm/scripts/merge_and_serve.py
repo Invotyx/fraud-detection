@@ -139,9 +139,18 @@ def serve_vllm(merged_dir: str, port: int = 8001) -> subprocess.Popen:
         "--dtype", "float16",
         "--gpu-memory-utilization", "0.95",
     ]
+
+    # T4 GPUs on g4dn are PCIe-only (no NVLink). NCCL P2P over PCIe is
+    # unreliable and causes "unhandled cuda error" on ncclCommInitRank.
+    # Disabling P2P forces NCCL to use shared-memory / network transport
+    # which works on all topologies.
+    env = {**__import__("os").environ,
+           "NCCL_P2P_DISABLE": "1",
+           "NCCL_SHM_DISABLE": "0"}
+
     print(
-        f"Starting vLLM server on :{port} (tensor_parallel_size={tensor_parallel_size})")
-    proc = subprocess.Popen(cmd)
+        f"Starting vLLM server on :{port} (tensor_parallel_size={tensor_parallel_size}, NCCL_P2P_DISABLE=1)")
+    proc = subprocess.Popen(cmd, env=env)
     return proc
 
 

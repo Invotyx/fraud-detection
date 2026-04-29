@@ -643,6 +643,102 @@
         border-color: #991b1b;
         color: #fca5a5;
       }
+
+      /* ---- Error panel ---- */
+      .error-panel {
+        border: 1px solid #7f1d1d;
+        border-radius: 10px;
+        background: #1a0a0a;
+        overflow: hidden;
+      }
+      .error-panel-header {
+        background: #2d0f0f;
+        padding: 14px 18px;
+        display: flex;
+        align-items: center;
+        gap: 12px;
+        border-bottom: 1px solid #7f1d1d;
+      }
+      .error-panel-header .ep-icon {
+        font-size: 1.6rem;
+        line-height: 1;
+      }
+      .error-panel-header .ep-title {
+        font-size: 1rem;
+        font-weight: 700;
+        color: #fca5a5;
+      }
+      .error-panel-header .ep-status {
+        margin-left: auto;
+        font-family: "Cascadia Code", "Fira Code", monospace;
+        font-size: 0.8rem;
+        background: #450a0a;
+        color: #fca5a5;
+        padding: 3px 10px;
+        border-radius: 6px;
+      }
+      .error-panel-body {
+        padding: 14px 18px;
+        display: flex;
+        flex-direction: column;
+        gap: 10px;
+      }
+      .error-detail-msg {
+        font-size: 0.82rem;
+        color: #fecaca;
+        line-height: 1.55;
+      }
+      .error-validation-list {
+        list-style: none;
+        display: flex;
+        flex-direction: column;
+        gap: 5px;
+        margin: 0;
+        padding: 0;
+      }
+      .error-validation-list li {
+        background: #2d0f0f;
+        border: 1px solid #7f1d1d;
+        border-radius: 6px;
+        padding: 6px 10px;
+        font-size: 0.77rem;
+        color: #fca5a5;
+      }
+      .error-validation-list li .ev-loc {
+        font-family: "Cascadia Code", "Fira Code", monospace;
+        color: #fdba74;
+        margin-right: 6px;
+      }
+      .error-raw-toggle {
+        background: none;
+        border: 1px solid #374151;
+        border-radius: 6px;
+        color: #64748b;
+        cursor: pointer;
+        font-size: 0.73rem;
+        padding: 4px 10px;
+        align-self: flex-start;
+        transition:
+          border-color 0.15s,
+          color 0.15s;
+      }
+      .error-raw-toggle:hover {
+        border-color: #ef4444;
+        color: #fca5a5;
+      }
+      .error-raw-body {
+        background: #0f1117;
+        border: 1px solid #2d3148;
+        border-radius: 8px;
+        font-family: "Cascadia Code", "Fira Code", monospace;
+        font-size: 0.73rem;
+        line-height: 1.5;
+        overflow-x: auto;
+        padding: 12px;
+        white-space: pre;
+        color: #94a3b8;
+        display: none;
+      }
     </style>
   </head>
   <body>
@@ -1078,14 +1174,26 @@
             signal: AbortSignal.timeout(30000),
           });
 
-          const data = await res.json();
+          let data = null;
+          try {
+            data = await res.json();
+          } catch (_) {
+            // Non-JSON body (e.g. nginx 502/504 HTML page)
+            renderServerError(res.status, res.statusText, null);
+            renderJson({
+              error: `HTTP ${res.status} — non-JSON response body`,
+            });
+            toast(`HTTP ${res.status} — see Result tab`, true);
+            switchTab("result");
+            return;
+          }
           const elapsed = Date.now() - start;
 
           if (!res.ok) {
-            toast(
-              `Error ${res.status}: ${data.detail ?? JSON.stringify(data)}`,
-              true,
-            );
+            renderServerError(res.status, res.statusText, data);
+            renderJson(data ?? { error: `HTTP ${res.status}` });
+            toast(`HTTP ${res.status} — see Result tab`, true);
+            switchTab("result");
             return;
           }
 
@@ -1095,11 +1203,110 @@
           renderJson(data);
           switchTab("result");
         } catch (err) {
-          toast("Request failed: " + err.message, true);
+          const isTimeout =
+            err.name === "TimeoutError" || err.name === "AbortError";
+          renderServerError(
+            isTimeout ? 504 : 0,
+            isTimeout ? "Gateway Timeout" : "Network Error",
+            { detail: err.message },
+          );
+          renderJson({ error: err.message });
+          toast(
+            (isTimeout ? "Request timed out" : "Network error") +
+              " — see Result tab",
+            true,
+          );
+          switchTab("result");
         } finally {
           btn.disabled = false;
           btn.textContent = "Analyze";
         }
+      }
+
+      /* =========================================================================
+   Server error panel
+   ========================================================================= */
+      function renderServerError(status, statusText, body) {
+        const area = document.getElementById("tab-result");
+        area.innerHTML = "";
+
+        const isServerError = status >= 500;
+        const isValidation = status === 422;
+
+        const panel = el("div", "error-panel");
+
+        // Header
+        const header = el("div", "error-panel-header");
+        const iconMap = {
+          500: "💥",
+          422: "⚠️",
+          401: "🔐",
+          403: "🔒",
+          404: "🔍",
+          429: "🚦",
+        };
+        header.innerHTML = `
+          <span class="ep-icon">${iconMap[status] ?? "❌"}</span>
+          <div>
+            <div class="ep-title">${isServerError ? "Internal Server Error" : isValidation ? "Validation Error" : "Request Error"}</div>
+            <div style="font-size:.74rem;color:#94a3b8;margin-top:2px">${isServerError ? "The server encountered an unexpected condition." : isValidation ? "The request payload failed schema validation." : statusText}</div>
+          </div>
+          <span class="ep-status">HTTP ${status}</span>`;
+        panel.appendChild(header);
+
+        // Body
+        const bodyEl = el("div", "error-panel-body");
+
+        // 422 — structured FastAPI validation errors
+        if (isValidation && Array.isArray(body?.detail)) {
+          const list = document.createElement("ul");
+          list.className = "error-validation-list";
+          body.detail.forEach((err) => {
+            const loc = (err.loc ?? []).join(" → ");
+            const li = document.createElement("li");
+            li.innerHTML = `<span class="ev-loc">${escHtml(loc)}</span>${escHtml(err.msg ?? "")}${err.type ? ` <span style="color:#6b7280;font-size:.68rem">(${escHtml(err.type)})</span>` : ""}`;
+            list.appendChild(li);
+          });
+          bodyEl.appendChild(list);
+        } else if (body?.detail) {
+          // String detail (most FastAPI errors)
+          const msg = el("div", "error-detail-msg");
+          msg.textContent =
+            typeof body.detail === "string"
+              ? body.detail
+              : JSON.stringify(body.detail, null, 2);
+          bodyEl.appendChild(msg);
+        }
+
+        // Traceback hint for 500s
+        if (isServerError) {
+          const hint = el("div", "error-detail-msg");
+          hint.style.color = "#6b7280";
+          hint.style.fontSize = "0.75rem";
+          hint.innerHTML =
+            "Check the server logs for the full traceback. Common causes: database connectivity, missing env vars, or an unhandled exception in the pipeline.";
+          bodyEl.appendChild(hint);
+        }
+
+        // Raw body toggle
+        const rawJson = JSON.stringify(body, null, 2);
+        const toggle = document.createElement("button");
+        toggle.className = "error-raw-toggle";
+        toggle.textContent = "Show raw response ▸";
+        const rawPre = el("pre", "error-raw-body");
+        rawPre.textContent = rawJson ?? "(empty body)";
+        toggle.onclick = () => {
+          const visible = rawPre.style.display !== "none";
+          rawPre.style.display = visible ? "none" : "block";
+          toggle.textContent = visible
+            ? "Show raw response ▸"
+            : "Hide raw response ▾";
+        };
+        bodyEl.appendChild(toggle);
+        bodyEl.appendChild(rawPre);
+
+        panel.appendChild(bodyEl);
+        area.appendChild(panel);
       }
 
       /* =========================================================================

@@ -39,7 +39,7 @@ class Settings(BaseSettings):
     llm_server_url: str = "http://localhost:8001"
     llm_request_timeout: int = 120
     llm_endpoint: str = "/v1/chat/completions"
-    llm_model_name: str = "fraud-detector-v1"
+    llm_model_name: str = "fraud-detector"
     # path to system_prompt.txt; empty = use bundled default
     llm_system_prompt_path: str = ""
 

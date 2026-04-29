@@ -16,6 +16,7 @@ services:
       - LOG_LEVEL=${LOG_LEVEL:-INFO}
       - APP_ENV=${APP_ENV:-development}
       - LLM_SERVER_URL=${LLM_SERVER_URL:-http://host.docker.internal:8001}
+      - LLM_MODEL_NAME=${LLM_MODEL_NAME:-fraud-detector}
       - JWT_SECRET_KEY=${JWT_SECRET_KEY:-change-me-in-production}
       - RATE_LIMIT_PER_MINUTE=${RATE_LIMIT_PER_MINUTE:-100}
     depends_on:

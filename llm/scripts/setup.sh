@@ -126,12 +126,14 @@ PYEOF
 # ---------------------------------------------------------------------------
 echo "[6/8] Installing LLM training packages..."
 pip install -q \
-    transformers==4.45.2 \
-    datasets==2.21.0 \
-    peft==0.13.2 \
-    bitsandbytes==0.44.1 \
-    accelerate==0.34.2 \
-    trl==0.11.4 \
+    "transformers==4.45.2" \
+    "tokenizers==0.20.3" \
+    "huggingface-hub>=0.23.2,<1.0" \
+    "datasets==2.21.0" \
+    "peft==0.13.2" \
+    "bitsandbytes==0.44.1" \
+    "accelerate==0.34.2" \
+    "trl==0.11.4" \
     rich \
     sentencepiece \
     einops \
@@ -141,7 +143,7 @@ pip install -q \
     rouge-score \
     bert-score \
     nltk \
-    vllm
+    "vllm==0.6.4.post1"
 
 # ---------------------------------------------------------------------------
 # 7. Experiment tracking

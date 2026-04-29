@@ -65,29 +65,27 @@ def merge_lora(checkpoint: str, merged_dir: str) -> None:
     """Merge LoRA adapter weights into the base model and save to merged_dir."""
     import torch
     from peft import PeftModel
-    from transformers import AutoModelForCausalLM, AutoTokenizer, BitsAndBytesConfig
+    from transformers import AutoModelForCausalLM, AutoTokenizer
 
     print(f"\n[1/3] Loading checkpoint: {checkpoint}")
     base_model_id = _load_adapter_base(checkpoint)
     print(f"      Base model: {base_model_id}")
 
-    bnb_config = BitsAndBytesConfig(
-        load_in_4bit=True,
-        bnb_4bit_compute_dtype=torch.float16,
-        bnb_4bit_quant_type="nf4",
-        bnb_4bit_use_double_quant=True,
-    )
-
+    # Load in fp16 (NOT 4-bit) so merge_and_unload() produces clean float16
+    # weights. Loading with bitsandbytes 4-bit embeds .absmax quantization
+    # metadata into the safetensors shards, which vLLM cannot load.
     try:
         model = AutoModelForCausalLM.from_pretrained(
-            base_model_id, quantization_config=bnb_config, device_map="auto"
+            base_model_id,
+            torch_dtype=torch.float16,
+            device_map="auto",
         )
         tokenizer = AutoTokenizer.from_pretrained(checkpoint)
     except Exception as exc:
         print(f"  Fallback to Mistral-7B ({exc})")
         model = AutoModelForCausalLM.from_pretrained(
             "mistralai/Mistral-7B-Instruct-v0.3",
-            quantization_config=bnb_config,
+            torch_dtype=torch.float16,
             device_map="auto",
             trust_remote_code=False,
         )

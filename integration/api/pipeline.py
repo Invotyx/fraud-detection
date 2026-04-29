@@ -273,7 +273,8 @@ async def run_pipeline(
     # URLs extracted by the sanitizer are not re-checked for injection payloads
     # embedded in their query parameters by the guard prefilter above.
     if sanitized.detected_urls:
-        url_param_result = classify_injection_from_urls(sanitized.detected_urls)
+        url_param_result = classify_injection_from_urls(
+            sanitized.detected_urls)
         if url_param_result.rule_match and url_param_result.score >= settings.guard_prefilter_score_threshold:
             log_stage("url_param_injection", trace_id=trace_id,
                       score=url_param_result.score, flags=url_param_result.flags)
@@ -293,13 +294,15 @@ async def run_pipeline(
             await log_request(
                 db,
                 trace_id=trace_id,
-                sanitized_text=sanitized.sanitized_text[:settings.audit_log_content_max_length],
+                sanitized_text=sanitized.sanitized_text[:
+                                                        settings.audit_log_content_max_length],
                 raw_text=request.content,
                 classifier_scores={"prompt_injection": _block_score},
                 llm_response=None,
                 unified_risk_score=_block_score,
                 decision=Decision.BLOCK.value,
-                flags={"url_param_injection": True, "flags": url_param_result.flags},
+                flags={"url_param_injection": True,
+                       "flags": url_param_result.flags},
                 hitl_required=False,
                 processing_time_ms=_proc_ms,
             )
@@ -479,20 +482,22 @@ async def run_pipeline(
     # ------------------------------------------------------------------
     validation_flags: Dict[str, Any] = {}
     if llm_response_raw:
-        import json as _json
         val_result = validate_output(
-            _json.dumps(llm_response_raw),
+            llm_response_raw,
             system_prompt_fragments=None,
         )
+        _pii_detected = any("pii_in_output:" in i for i in val_result.issues)
+        _prompt_leaked = any(
+            "system_prompt_leak:" in i for i in val_result.issues)
         validation_flags = {
             "valid_schema": val_result.valid,
-            "pii_detected": val_result.pii_detected,
-            "prompt_leak": val_result.system_prompt_leaked,
-            "unsafe_content": val_result.unsafe_content_detected,
+            "pii_detected": _pii_detected,
+            "prompt_leak": _prompt_leaked,
+            "unsafe_content": any("unsafe_content:" in i for i in val_result.issues),
             "issues": val_result.issues,
         }
         # Escalate risk if output contains PII or prompt leakage
-        if val_result.pii_detected or val_result.system_prompt_leaked:
+        if _pii_detected or _prompt_leaked:
             agg = AggregationResult(
                 parameter_scores=agg.parameter_scores,
                 unified_risk_score=max(agg.unified_risk_score, 0.75),
@@ -511,7 +516,7 @@ async def run_pipeline(
         enforcement_results = scan_llm_output_for_tool_calls(
             _json.dumps(llm_response_raw))
         policy_violations = [
-            r.tool_name for r in enforcement_results if not r.allowed
+            r.reason for r in enforcement_results if not r.allowed
         ]
         if policy_violations:
             log_stage("policy", trace_id=trace_id,
@@ -532,13 +537,10 @@ async def run_pipeline(
     if agg.decision == Decision.REVIEW:
         await hitl_enqueue(
             db,
-            request_id=trace_id,
+            request_id=str(trace_id),
             unified_risk_score=agg.unified_risk_score,
-            payload={
-                "content_hash": sanitized.sanitized_hash,
-                "scores": param_scores,
-                "flags": validation_flags,
-            },
+            classifier_scores=param_scores,
+            llm_response=llm_response_raw,
         )
         hitl_pending = True
         log_stage("hitl", trace_id=trace_id, enqueued=True)

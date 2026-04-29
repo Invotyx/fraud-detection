@@ -37,7 +37,7 @@ class Settings(BaseSettings):
 
     # LLM inference server
     llm_server_url: str = "http://localhost:8001"
-    llm_request_timeout: int = 10
+    llm_request_timeout: int = 120
     llm_endpoint: str = "/v1/chat/completions"
     llm_model_name: str = "fraud-detector-v1"
     # path to system_prompt.txt; empty = use bundled default
@@ -56,8 +56,8 @@ class Settings(BaseSettings):
     risk_allow_threshold: float = 0.3
     risk_review_threshold: float = 0.7
 
-    # Pipeline
-    pipeline_timeout_seconds: float = 5.0
+    # Pipeline — must be > llm_request_timeout to allow LLM to respond
+    pipeline_timeout_seconds: float = 130.0
 
     # Inline heuristic scores used before full classifiers run
     url_risk_suspicious_score: float = 0.5

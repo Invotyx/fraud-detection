@@ -282,9 +282,19 @@ def create_app() -> FastAPI:
                 detail="decision must be 'allow' or 'block'",
             )
         try:
-            await submit_decision(db, item_id, x_api_key, decision, notes)
+            ok = await submit_decision(
+                db, item_id,
+                reviewer=x_api_key,
+                decision=decision,
+                notes=notes,
+            )
         except ValueError as exc:
-            raise HTTPException(status_code=404, detail=str(exc)) from exc
+            raise HTTPException(status_code=422, detail=str(exc)) from exc
+        if not ok:
+            raise HTTPException(
+                status_code=404,
+                detail=f"Item {item_id!r} not found or already reviewed.",
+            )
         return JSONResponse(content={"status": "ok", "item_id": item_id, "decision": decision})
 
     return app

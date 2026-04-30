@@ -79,7 +79,7 @@ class Settings(BaseSettings):
     guard_prefilter_score_threshold: float = 0.90
 
     # LLM inference parameters
-    llm_max_tokens: int = 350
+    llm_max_tokens: int = 500
     llm_temperature: float = 0.0
 
     # Audit log — content truncation length for storage

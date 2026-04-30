@@ -122,8 +122,8 @@ def serve_vllm(merged_dir: str, port: int = 8001) -> subprocess.Popen:
     #   for concurrent eval requests (workers=4).
     # --enable-prefix-caching: system prompt is 3552 tokens and identical for
     #   every request — caching eliminates repeated prefill cost.
-    # --max-model-len 8192: prompt (3552) + max_tokens (350) + generous KV
-    #   headroom; well within 48 GB per-GPU budget.
+    # --max-model-len 8192: prompt (3552) + max_tokens (500) + user input (~200)
+    #   = ~4252 peak; 8192 gives generous KV headroom.
     cmd = [
         sys.executable, "-m", "vllm.entrypoints.openai.api_server",
         "--model", merged_dir,

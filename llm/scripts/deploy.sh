@@ -227,7 +227,8 @@ else
         --test-data "${DATA_DIR}/test.jsonl" \
         --timeout 30 \
         --workers 4 \
-        --output "${CHECKPOINTS_DIR}/run2/eval_results.json"
+        --output "${CHECKPOINTS_DIR}/run2/eval_results.json" \
+        || warn_step "Eval exited non-zero — SLA not met; results saved; continuing to targeted fix"
     touch "${STATE_DIR}/phase7a.done"
     done_step "eval.py"
 fi

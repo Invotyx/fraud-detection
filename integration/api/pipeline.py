@@ -610,7 +610,9 @@ async def run_pipeline(
     # ------------------------------------------------------------------
     def _ps(key: str) -> ParameterScore:
         s = param_scores.get(key, 0.0)
-        return ParameterScore(score=s, flag=s >= 0.7, reason="")
+        llm_block = (llm_response_raw or {}).get(key, {})
+        reason = llm_block.get("reason", "") if isinstance(llm_block, dict) else ""
+        return ParameterScore(score=s, flag=s >= 0.7, reason=reason)
 
     result = FraudAnalysisResult(
         url_domain_risk=_ps("url_domain_risk"),

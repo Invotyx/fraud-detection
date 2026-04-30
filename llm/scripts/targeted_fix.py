@@ -205,7 +205,8 @@ def generate_targeted_examples(
     # over-flag safe inputs. Target: ~40% of the final dataset is benign.
     total_fraud = len(fraud_examples)
     benign_count = int(total_fraud * benign_ratio / (1 - benign_ratio))
-    print(f"  Generating {benign_count} benign counterexamples ({benign_ratio:.0%} of dataset)...")
+    print(
+        f"  Generating {benign_count} benign counterexamples ({benign_ratio:.0%} of dataset)...")
 
     benign_examples: List[Dict[str, Any]] = []
     for _ in range(benign_count):
@@ -314,13 +315,12 @@ def run_targeted_fix(
     training_args = SFTConfig(
         output_dir=output_dir,
         per_device_train_batch_size=2,
-        gradient_accumulation_steps=4,    # 4 GPUs × 4 steps = 16 effective
+        gradient_accumulation_steps=8,    # single GPU: 2×8 = 16 effective batch
         num_train_epochs=num_epochs,
         learning_rate=5e-5,  # lower LR for targeted fine-tuning
         fp16=True,
-        # FSDP: activation_checkpointing in fsdp_config instead
-        gradient_checkpointing=False,
-        optim="adamw_torch",              # standard AdamW; paged_adamw requires bitsandbytes
+        gradient_checkpointing=True,      # saves ~30% VRAM on single GPU
+        optim="adamw_torch",
         lr_scheduler_type="cosine",
         warmup_ratio=0.05,
         logging_steps=10,
@@ -328,17 +328,8 @@ def run_targeted_fix(
         save_total_limit=2,
         report_to="none",
         seed=42,
-        fsdp="full_shard auto_wrap",
-        fsdp_config={
-            "min_num_params": 1e8,
-            "backward_prefetch": "backward_pre",
-            "forward_prefetch": False,
-            "offload_params": False,
-            "use_orig_params": True,
-            "sync_module_states": True,
-            "activation_checkpointing": True,
-        },
-        # SFT-specific args (moved here from SFTTrainer constructor)
+        # No FSDP — single L40S GPU; FSDP requires multiple GPUs
+        # SFT-specific args
         max_seq_length=2048,
         dataset_text_field=None,
         packing=False,

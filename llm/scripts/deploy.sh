@@ -267,15 +267,18 @@ else
         sleep 3  # allow CUDA driver to reclaim memory
 
         # Chain from the latest completed run so re-runs build on top of prior work.
+        # Walk run3, run4, run5... and find the highest runN/final that exists.
         _BASE_CKPT="${CHECKPOINTS_DIR}/run2/final"
-        _OUT_RUN="${CHECKPOINTS_DIR}/run3"
-        _MERGED_DIR="${CHECKPOINTS_DIR}/final_merged_v3"
-        if [[ -d "${CHECKPOINTS_DIR}/run3/final" ]]; then
-            warn_step "run3/final exists — chaining: run3 → run4"
-            _BASE_CKPT="${CHECKPOINTS_DIR}/run3/final"
-            _OUT_RUN="${CHECKPOINTS_DIR}/run4"
-            _MERGED_DIR="${CHECKPOINTS_DIR}/final_merged_v4"
-        fi
+        _NEXT_RUN_NUM=3
+        for _n in 3 4 5 6 7; do
+            if [[ -d "${CHECKPOINTS_DIR}/run${_n}/final" ]]; then
+                _BASE_CKPT="${CHECKPOINTS_DIR}/run${_n}/final"
+                _NEXT_RUN_NUM=$((_n + 1))
+            fi
+        done
+        _OUT_RUN="${CHECKPOINTS_DIR}/run${_NEXT_RUN_NUM}"
+        _MERGED_DIR="${CHECKPOINTS_DIR}/final_merged_v${_NEXT_RUN_NUM}"
+        warn_step "Chaining: $(basename ${_BASE_CKPT%/final}) → run${_NEXT_RUN_NUM}"
 
         python llm/scripts/targeted_fix.py \
             --eval-results "${CHECKPOINTS_DIR}/run2/eval_results.json" \

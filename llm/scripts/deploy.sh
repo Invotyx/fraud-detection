@@ -234,16 +234,41 @@ else
 fi
 
 # =============================================================================
-# Phase 7b — Red-Team Adversarial Probing
+# Phase 7b — Targeted Fix (fine-tune on weak parameters + benign examples)
+# Runs only if weak_params.json exists and lists at least one weak parameter.
+# Skipped automatically if all parameters already meet the F1 target.
 # =============================================================================
-step "Phase 7b: Red-Team Adversarial Probing"
+step "Phase 7b: Targeted Fix — Fine-tune Weak Parameters"
 if [[ -f "${STATE_DIR}/phase7b.done" ]]; then
     warn_step "Phase 7b already completed — skipping"
+else
+    WEAK_PARAMS_FILE="${CHECKPOINTS_DIR}/run2/weak_params.json"
+    if [[ -f "${WEAK_PARAMS_FILE}" ]] && \
+       python -c "import json,sys; d=json.load(open('${WEAK_PARAMS_FILE}')); sys.exit(0 if d.get('weak_params') else 1)" 2>/dev/null; then
+        python llm/scripts/targeted_fix.py \
+            --eval-results "${CHECKPOINTS_DIR}/run2/eval_results.json" \
+            --checkpoint "${CHECKPOINTS_DIR}/run2/final" \
+            --output-dir "${CHECKPOINTS_DIR}/run3" \
+            --epochs 2
+        touch "${STATE_DIR}/phase7b.done"
+        done_step "targeted_fix.py"
+    else
+        warn_step "No weak parameters found — skipping targeted fix"
+        touch "${STATE_DIR}/phase7b.done"
+    fi
+fi
+
+# =============================================================================
+# Phase 7c — Red-Team Adversarial Probing
+# =============================================================================
+step "Phase 7c: Red-Team Adversarial Probing"
+if [[ -f "${STATE_DIR}/phase7c.done" ]]; then
+    warn_step "Phase 7c already completed — skipping"
 else
     python llm/scripts/red_team.py \
         --server-url "${SERVER_URL}" \
         --output "${CHECKPOINTS_DIR}/red_team_report.json"
-    touch "${STATE_DIR}/phase7b.done"
+    touch "${STATE_DIR}/phase7c.done"
     done_step "red_team.py"
 fi
 

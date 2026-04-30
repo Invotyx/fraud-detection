@@ -266,29 +266,40 @@ else
         pkill -KILL -f "vllm.entrypoints.openai.api_server" 2>/dev/null || true
         sleep 3  # allow CUDA driver to reclaim memory
 
+        # Chain from the latest completed run so re-runs build on top of prior work.
+        _BASE_CKPT="${CHECKPOINTS_DIR}/run2/final"
+        _OUT_RUN="${CHECKPOINTS_DIR}/run3"
+        _MERGED_DIR="${CHECKPOINTS_DIR}/final_merged_v3"
+        if [[ -d "${CHECKPOINTS_DIR}/run3/final" ]]; then
+            warn_step "run3/final exists — chaining: run3 → run4"
+            _BASE_CKPT="${CHECKPOINTS_DIR}/run3/final"
+            _OUT_RUN="${CHECKPOINTS_DIR}/run4"
+            _MERGED_DIR="${CHECKPOINTS_DIR}/final_merged_v4"
+        fi
+
         python llm/scripts/targeted_fix.py \
             --eval-results "${CHECKPOINTS_DIR}/run2/eval_results.json" \
-            --checkpoint "${CHECKPOINTS_DIR}/run2/final" \
-            --output-dir "${CHECKPOINTS_DIR}/run3" \
+            --checkpoint "${_BASE_CKPT}" \
+            --output-dir "${_OUT_RUN}" \
             --epochs 2
         touch "${STATE_DIR}/phase7b.done"
         done_step "targeted_fix.py"
 
-        # Merge run3 adapter and restart vLLM so red-team tests the improved model.
-        warn_step "Restarting vLLM with run3 weights..."
+        # Merge and restart vLLM so red-team tests the improved model.
+        warn_step "Restarting vLLM with updated weights..."
         _skip_merge_flag=""
-        if [[ -f "${CHECKPOINTS_DIR}/final_merged_v3/model.safetensors.index.json" ]]; then
+        if [[ -f "${_MERGED_DIR}/model.safetensors.index.json" ]]; then
             _skip_merge_flag="--skip-merge"
-            warn_step "final_merged_v3 already exists — skipping re-merge"
+            warn_step "${_MERGED_DIR} already exists — skipping re-merge"
         fi
         python llm/scripts/merge_and_serve.py \
-            --checkpoint "${CHECKPOINTS_DIR}/run3/final" \
-            --merged-dir "${CHECKPOINTS_DIR}/final_merged_v3" \
+            --checkpoint "${_OUT_RUN}/final" \
+            --merged-dir "${_MERGED_DIR}" \
             --port "${LLM_SERVER_PORT}" \
             ${_skip_merge_flag} &
         echo "Waiting for vLLM server to become ready (timeout ${SERVER_STARTUP_WAIT_SECONDS}s)..."
         wait_for_server "${SERVER_URL}" "${SERVER_STARTUP_WAIT_SECONDS}"
-        done_step "vLLM restarted with run3 weights"
+        done_step "vLLM restarted with $(basename ${_MERGED_DIR}) weights"
     else
         warn_step "No weak parameters found — skipping targeted fix"
         touch "${STATE_DIR}/phase7b.done"

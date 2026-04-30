@@ -321,6 +321,21 @@ else
 fi
 
 # =============================================================================
+# Phase 7d — Pre-Harden Eval (validate model quality before locking)
+# =============================================================================
+step "Phase 7d: Pre-Harden Eval"
+if [[ -f "${STATE_DIR}/phase7d.done" ]]; then
+    warn_step "Phase 7d already completed — skipping"
+else
+    python llm/scripts/eval.py \
+        --server-url "${SERVER_URL}" \
+        --output "${CHECKPOINTS_DIR}/pre_harden_eval.json" \
+        || warn_step "Eval reported SLA warnings (non-fatal) — see pre_harden_eval.json"
+    touch "${STATE_DIR}/phase7d.done"
+    done_step "pre-harden eval"
+fi
+
+# =============================================================================
 # Phase 8 — Harden (checksums, systemd, CloudWatch)
 # =============================================================================
 step "Phase 8: Harden — Lock Model, Checksums, systemd, CloudWatch"
@@ -340,5 +355,6 @@ echo -e "${GREEN}============================================================${N
 echo -e "${GREEN} All phases completed successfully.${NC}"
 echo -e "${GREEN} Inference server : ${SERVER_URL}${NC}"
 echo -e "${GREEN} Eval results     : ${CHECKPOINTS_DIR}/run2/eval_results.json${NC}"
+echo -e "${GREEN} Pre-harden eval  : ${CHECKPOINTS_DIR}/pre_harden_eval.json${NC}"
 echo -e "${GREEN} Red-team report  : ${CHECKPOINTS_DIR}/red_team_report.json${NC}"
 echo -e "${GREEN}============================================================${NC}"

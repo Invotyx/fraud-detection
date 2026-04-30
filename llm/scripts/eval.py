@@ -65,6 +65,7 @@ def _call_server(
             {"role": "system", "content": system_prompt},
             {"role": "user", "content": user_text},
         ],
+        "max_tokens": 512,
     }).encode()
     req = urllib.request.Request(
         f"{server_url}/v1/chat/completions",

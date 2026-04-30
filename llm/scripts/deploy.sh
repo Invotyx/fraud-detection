@@ -225,8 +225,8 @@ else
     python llm/scripts/eval.py \
         --server-url "${SERVER_URL}" \
         --test-data "${DATA_DIR}/test.jsonl" \
-        --timeout 120 \
-        --workers 8 \
+        --timeout 60 \
+        --workers 1 \
         --output "${CHECKPOINTS_DIR}/run2/eval_results.json"
     touch "${STATE_DIR}/phase7a.done"
     done_step "eval.py"

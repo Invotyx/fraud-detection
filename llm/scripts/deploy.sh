@@ -254,6 +254,18 @@ else
     WEAK_PARAMS_FILE="${CHECKPOINTS_DIR}/run2/weak_params.json"
     if [[ -f "${WEAK_PARAMS_FILE}" ]] && \
        python -c "import json,sys; d=json.load(open('${WEAK_PARAMS_FILE}')); sys.exit(0 if d.get('weak_params') else 1)" 2>/dev/null; then
+
+        # Training needs the full GPU (~16 GB for LLaMA-8B fp16 + LoRA).
+        # vLLM holds ~40 GB — stop it first so CUDA memory is free.
+        warn_step "Stopping vLLM to free GPU memory for training..."
+        pkill -TERM -f "vllm.entrypoints.openai.api_server" 2>/dev/null || true
+        for _i in $(seq 1 20); do
+            pgrep -f "vllm.entrypoints.openai.api_server" >/dev/null 2>&1 || break
+            sleep 1
+        done
+        pkill -KILL -f "vllm.entrypoints.openai.api_server" 2>/dev/null || true
+        sleep 3  # allow CUDA driver to reclaim memory
+
         python llm/scripts/targeted_fix.py \
             --eval-results "${CHECKPOINTS_DIR}/run2/eval_results.json" \
             --checkpoint "${CHECKPOINTS_DIR}/run2/final" \
@@ -261,6 +273,16 @@ else
             --epochs 2
         touch "${STATE_DIR}/phase7b.done"
         done_step "targeted_fix.py"
+
+        # Merge run3 adapter and restart vLLM so red-team tests the improved model.
+        warn_step "Restarting vLLM with run3 weights..."
+        python llm/scripts/merge_and_serve.py \
+            --checkpoint "${CHECKPOINTS_DIR}/run3/final" \
+            --merged-dir "${CHECKPOINTS_DIR}/final_merged_v3" \
+            --port "${LLM_SERVER_PORT}" &
+        echo "Waiting for vLLM server to become ready (timeout ${SERVER_STARTUP_WAIT_SECONDS}s)..."
+        wait_for_server "${SERVER_URL}" "${SERVER_STARTUP_WAIT_SECONDS}"
+        done_step "vLLM restarted with run3 weights"
     else
         warn_step "No weak parameters found — skipping targeted fix"
         touch "${STATE_DIR}/phase7b.done"

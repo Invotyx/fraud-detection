@@ -129,15 +129,15 @@ def serve_vllm(merged_dir: str, port: int = 8001) -> subprocess.Popen:
         "--model", merged_dir,
         "--port", str(port),
         "--host", "0.0.0.0",
-        "--tensor-parallel-size", "2",
-        "--distributed-executor-backend", "mp",
+        "--tensor-parallel-size", "1",
         "--dtype", "float16",
         "--max-model-len", "8192",
         "--gpu-memory-utilization", "0.90",
         "--enable-prefix-caching",
         "--served-model-name", "fraud-detector",
     ]
-    print(f"Starting vLLM server on :{port} (tensor-parallel-size=2, float16, prefix-caching)")
+    print(
+        f"Starting vLLM server on :{port} (tensor-parallel-size=2, float16, prefix-caching)")
     proc = subprocess.Popen(cmd)
     return proc
 

@@ -307,7 +307,9 @@ def run_targeted_fix(
         bias="none", task_type="CAUSAL_LM",
     )
     model = get_peft_model(model, lora_config)
-    # required: activation_checkpointing recompute would double KV cache size
+    # Required for gradient checkpointing + LoRA: input embeddings must require
+    # grad so that the recompute graph can propagate through frozen base layers.
+    model.enable_input_require_grads()
     model.config.use_cache = False
 
     Path(output_dir).mkdir(parents=True, exist_ok=True)

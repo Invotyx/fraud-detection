@@ -130,6 +130,7 @@ def serve_vllm(merged_dir: str, port: int = 8001) -> subprocess.Popen:
         "--port", str(port),
         "--host", "0.0.0.0",
         "--tensor-parallel-size", "2",
+        "--distributed-executor-backend", "mp",
         "--dtype", "float16",
         "--max-model-len", "8192",
         "--gpu-memory-utilization", "0.90",

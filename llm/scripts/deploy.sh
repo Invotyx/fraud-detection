@@ -183,36 +183,45 @@ fi
 # =============================================================================
 step "Phase 6: Merge LoRA Adapter and Start Inference Server"
 
-# Kill any stale vLLM process so it releases GPU memory before we start fresh.
-if pgrep -f "vllm.entrypoints.openai.api_server" >/dev/null 2>&1; then
-    warn_step "Killing existing vLLM process to free GPU memory..."
-    pkill -TERM -f "vllm.entrypoints.openai.api_server" || true
-    # Wait up to 15s for the process to exit and CUDA context to be released
-    for _i in $(seq 1 15); do
-        pgrep -f "vllm.entrypoints.openai.api_server" >/dev/null 2>&1 || break
-        sleep 1
-    done
-    pkill -KILL -f "vllm.entrypoints.openai.api_server" 2>/dev/null || true
-    sleep 3  # allow CUDA driver to reclaim memory
+# Check if vLLM is already healthy at the target port — if so, skip restart.
+_vllm_healthy=0
+if curl -sf --max-time 5 "${SERVER_URL}/health" >/dev/null 2>&1; then
+    _vllm_healthy=1
+    warn_step "vLLM already serving at ${SERVER_URL} — skipping restart"
 fi
 
-if [[ -f "${STATE_DIR}/phase6.done" ]]; then
-    warn_step "Phase 6 merge already completed — starting server against existing merged dir"
-    python llm/scripts/merge_and_serve.py \
-        --checkpoint "${CHECKPOINTS_DIR}/run2/final" \
-        --merged-dir "${CHECKPOINTS_DIR}/final_merged" \
-        --port 8001 \
-        --skip-merge &
-else
-    python llm/scripts/merge_and_serve.py \
-        --checkpoint "${CHECKPOINTS_DIR}/run2/final" \
-        --merged-dir "${CHECKPOINTS_DIR}/final_merged" \
-        --port 8001 &
-    touch "${STATE_DIR}/phase6.done"
+if [[ "${_vllm_healthy}" == "0" ]]; then
+    # Kill any stale vLLM process so it releases GPU memory before we start fresh.
+    if pgrep -f "vllm.entrypoints.openai.api_server" >/dev/null 2>&1; then
+        warn_step "Killing stale vLLM process to free GPU memory..."
+        pkill -TERM -f "vllm.entrypoints.openai.api_server" || true
+        for _i in $(seq 1 15); do
+            pgrep -f "vllm.entrypoints.openai.api_server" >/dev/null 2>&1 || break
+            sleep 1
+        done
+        pkill -KILL -f "vllm.entrypoints.openai.api_server" 2>/dev/null || true
+        sleep 3  # allow CUDA driver to reclaim memory
+    fi
+
+    if [[ -f "${STATE_DIR}/phase6.done" ]]; then
+        warn_step "Phase 6 merge already completed — starting server against existing merged dir"
+        python llm/scripts/merge_and_serve.py \
+            --checkpoint "${CHECKPOINTS_DIR}/run2/final" \
+            --merged-dir "${CHECKPOINTS_DIR}/final_merged" \
+            --port 8001 \
+            --skip-merge &
+    else
+        python llm/scripts/merge_and_serve.py \
+            --checkpoint "${CHECKPOINTS_DIR}/run2/final" \
+            --merged-dir "${CHECKPOINTS_DIR}/final_merged" \
+            --port 8001 &
+        touch "${STATE_DIR}/phase6.done"
+    fi
+
+    echo "Waiting for vLLM server to become ready (timeout ${SERVER_STARTUP_WAIT_SECONDS}s)..."
+    wait_for_server "${SERVER_URL}" "${SERVER_STARTUP_WAIT_SECONDS}"
 fi
 
-echo "Waiting for vLLM server to become ready (timeout ${SERVER_STARTUP_WAIT_SECONDS}s)..."
-wait_for_server "${SERVER_URL}" "${SERVER_STARTUP_WAIT_SECONDS}"
 done_step "merge_and_serve.py (server running in background)"
 
 # =============================================================================

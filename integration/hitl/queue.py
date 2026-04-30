@@ -32,7 +32,7 @@ _INSERT_SQL = text("""
         classifier_scores, llm_response, decision_pending
     ) VALUES (
         :id, :request_id, :created_at, :unified_risk_score,
-        :classifier_scores::jsonb, :llm_response::jsonb, :decision_pending
+        cast(:classifier_scores as jsonb), cast(:llm_response as jsonb), :decision_pending
     )
 """)
 

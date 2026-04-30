@@ -178,6 +178,15 @@ else
     done_step "targeted_fix.py"
 fi
 
+# Resolve the active merged model directory: highest final_merged_vN that exists,
+# falling back to final_merged. Computed once here; used by phases 6, 8, and summary.
+_ACTIVE_MERGED_DIR="${CHECKPOINTS_DIR}/final_merged"
+for _n in 3 4 5 6 7 8; do
+    if [[ -d "${CHECKPOINTS_DIR}/final_merged_v${_n}" ]]; then
+        _ACTIVE_MERGED_DIR="${CHECKPOINTS_DIR}/final_merged_v${_n}"
+    fi
+done
+
 # =============================================================================
 # Phase 6 — Merge LoRA and Serve
 # =============================================================================
@@ -204,16 +213,16 @@ if [[ "${_vllm_healthy}" == "0" ]]; then
     fi
 
     if [[ -f "${STATE_DIR}/phase6.done" ]]; then
-        warn_step "Phase 6 merge already completed — starting server against existing merged dir"
+        warn_step "Phase 6 merge already completed — starting server against ${_ACTIVE_MERGED_DIR}"
         python llm/scripts/merge_and_serve.py \
             --checkpoint "${CHECKPOINTS_DIR}/run2/final" \
-            --merged-dir "${CHECKPOINTS_DIR}/final_merged" \
+            --merged-dir "${_ACTIVE_MERGED_DIR}" \
             --port 8001 \
             --skip-merge &
     else
         python llm/scripts/merge_and_serve.py \
             --checkpoint "${CHECKPOINTS_DIR}/run2/final" \
-            --merged-dir "${CHECKPOINTS_DIR}/final_merged" \
+            --merged-dir "${_ACTIVE_MERGED_DIR}" \
             --port 8001 &
         touch "${STATE_DIR}/phase6.done"
     fi
@@ -323,6 +332,9 @@ else
     done_step "red_team.py"
 fi
 
+# Resolve the active merged model directory (highest final_merged_vN that exists).
+# (Already resolved above — this block is intentionally removed.)
+
 # =============================================================================
 # Phase 7d — Pre-Harden Eval (validate model quality before locking)
 # =============================================================================
@@ -346,7 +358,7 @@ if [[ -f "${STATE_DIR}/phase8.done" ]]; then
     warn_step "Phase 8 already completed — skipping"
 else
     bash llm/scripts/harden.sh \
-        --merged-dir "${CHECKPOINTS_DIR}/final_merged" \
+        --merged-dir "${_ACTIVE_MERGED_DIR}" \
         --port "${LLM_SERVER_PORT}"
     touch "${STATE_DIR}/phase8.done"
     done_step "harden.sh"
@@ -357,6 +369,7 @@ echo ""
 echo -e "${GREEN}============================================================${NC}"
 echo -e "${GREEN} All phases completed successfully.${NC}"
 echo -e "${GREEN} Inference server : ${SERVER_URL}${NC}"
+echo -e "${GREEN} Active model     : ${_ACTIVE_MERGED_DIR}${NC}"
 echo -e "${GREEN} Eval results     : ${CHECKPOINTS_DIR}/run2/eval_results.json${NC}"
 echo -e "${GREEN} Pre-harden eval  : ${CHECKPOINTS_DIR}/pre_harden_eval.json${NC}"
 echo -e "${GREEN} Red-team report  : ${CHECKPOINTS_DIR}/red_team_report.json${NC}"

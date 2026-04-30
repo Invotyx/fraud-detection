@@ -76,7 +76,9 @@ def _call_server(
         with urllib.request.urlopen(req, timeout=timeout) as resp:
             data = json.loads(resp.read())
             return data["choices"][0]["message"]["content"]
-    except Exception:
+    except Exception as exc:
+        ts = time.strftime("%H:%M:%S")
+        print(f"  [{ts}] REQUEST FAILED: {type(exc).__name__}: {exc}", flush=True)
         return None
 
 
@@ -240,18 +242,30 @@ def evaluate(
     total = len(test_data)
     done_count = 0
     _lock = threading.Lock()
+    start_time = time.perf_counter()
 
-    def _run_one(item: Dict[str, Any]):
+    def _run_one(args_tuple):
         nonlocal done_count
+        idx, item = args_tuple
         result = _process_one_item(item, infer_fn, system_prompt)
+        latency_ms, parse_failed = result[2], result[3]
         with _lock:
             done_count += 1
-            if done_count % 50 == 0 or done_count == total:
-                print(f"  Progress: {done_count}/{total}", flush=True)
+            ts = time.strftime("%H:%M:%S")
+            elapsed = time.perf_counter() - start_time
+            status = "PARSE_FAIL" if parse_failed else "ok"
+            rate = done_count / elapsed if elapsed > 0 else 0
+            eta_s = (total - done_count) / rate if rate > 0 else 0
+            print(
+                f"  [{ts}] {done_count}/{total}  idx={idx}  "
+                f"{latency_ms:.0f}ms  {status}  "
+                f"rate={rate:.2f}/s  ETA={eta_s/60:.1f}min",
+                flush=True,
+            )
         return result
 
     with ThreadPoolExecutor(max_workers=workers) as pool:
-        all_results = list(pool.map(_run_one, test_data))
+        all_results = list(pool.map(_run_one, enumerate(test_data)))
 
     predictions: List[Dict[str, float]] = [r[0] for r in all_results]
     references: List[Dict[str, Any]] = [r[1] for r in all_results]

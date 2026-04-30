@@ -33,7 +33,7 @@ BASE_MODEL_ID="${BASE_MODEL_ID:-meta-llama/Meta-Llama-3.1-8B-Instruct}"
 DATASET_COUNT="${DATASET_COUNT:-600}"
 LLM_SERVER_PORT="${LLM_SERVER_PORT:-8001}"
 SERVER_URL="${LLM_SERVER_URL:-http://localhost:${LLM_SERVER_PORT}}"
-SERVER_STARTUP_WAIT_SECONDS="${SERVER_STARTUP_WAIT_SECONDS:-300}"
+SERVER_STARTUP_WAIT_SECONDS="${SERVER_STARTUP_WAIT_SECONDS:-600}"
 PROMPT_TEST_STRICT="${PROMPT_TEST_STRICT:-0}"
 export PYTORCH_CUDA_ALLOC_CONF="${PYTORCH_CUDA_ALLOC_CONF:-expandable_segments:True}"
 
@@ -276,10 +276,16 @@ else
 
         # Merge run3 adapter and restart vLLM so red-team tests the improved model.
         warn_step "Restarting vLLM with run3 weights..."
+        _skip_merge_flag=""
+        if [[ -f "${CHECKPOINTS_DIR}/final_merged_v3/model.safetensors.index.json" ]]; then
+            _skip_merge_flag="--skip-merge"
+            warn_step "final_merged_v3 already exists — skipping re-merge"
+        fi
         python llm/scripts/merge_and_serve.py \
             --checkpoint "${CHECKPOINTS_DIR}/run3/final" \
             --merged-dir "${CHECKPOINTS_DIR}/final_merged_v3" \
-            --port "${LLM_SERVER_PORT}" &
+            --port "${LLM_SERVER_PORT}" \
+            ${_skip_merge_flag} &
         echo "Waiting for vLLM server to become ready (timeout ${SERVER_STARTUP_WAIT_SECONDS}s)..."
         wait_for_server "${SERVER_URL}" "${SERVER_STARTUP_WAIT_SECONDS}"
         done_step "vLLM restarted with run3 weights"
